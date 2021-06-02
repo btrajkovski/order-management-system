@@ -24,13 +24,15 @@ dependencies {
     implementation "com.typesafe.akka:akka-http_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-http-jackson_${versions.ScalaBinary}:${versions.AkkaVersion}"
 //    implementation "com.typesafe.akka:akka-persistence_${versions.ScalaBinary}:${versions.AkkaVersion}"
-//    implementation "com.typesafe.akka:akka-persistence-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
-//    implementation "com.typesafe.akka:akka-serialization-jackson_${versions.ScalaBinary}:${versions.AkkaVersion}"
+    implementation "com.typesafe.akka:akka-persistence-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
+    implementation "com.typesafe.akka:akka-serialization-jackson_${versions.ScalaBinary}:${versions.AkkaVersion}"
     implementation "com.typesafe.akka:akka-actor-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
     implementation "com.typesafe.akka:akka-stream_${versions.ScalaBinary}:${versions.AkkaVersion}"
     implementation 'ch.qos.logback:logback-classic:1.2.3'
-    testImplementation "com.typesafe.akka:akka-http-testkit_${versions.ScalaBinary}"
+    implementation "org.fusesource.leveldbjni:leveldbjni-all:1.8"
+//    testImplementation "com.typesafe.akka:akka-http-testkit_${versions.ScalaBinary}:${versions.AkkaVersion}"
     testImplementation "com.typesafe.akka:akka-actor-testkit-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
+    testImplementation "com.typesafe.akka:akka-persistence-testkit_${versions.ScalaBinary}:${versions.AkkaVersion}"
     testImplementation 'junit:junit:4.12'
 }
 
