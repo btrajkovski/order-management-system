@@ -8,6 +8,8 @@ import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.javadsl.Receive;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -16,6 +18,8 @@ import java.util.Optional;
 
 //#user-registry-actor
 public class OrderRegistry extends AbstractBehavior<OrderRegistry.Command> {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderRegistry.class);
 
     // actor protocol
     interface Command {
@@ -57,6 +61,16 @@ public class OrderRegistry extends AbstractBehavior<OrderRegistry.Command> {
         }
     }
 
+    public static final class ConfirmOrder implements Command {
+        public final long id;
+        public final ActorRef<ActionPerformed> replyTo;
+
+        public ConfirmOrder(long id, ActorRef<ActionPerformed> replyTo) {
+            this.id = id;
+            this.replyTo = replyTo;
+        }
+    }
+
 
     public static final class DeleteOrder implements Command {
         public final long id;
@@ -82,7 +96,7 @@ public class OrderRegistry extends AbstractBehavior<OrderRegistry.Command> {
         public final List<String> items;
         public final long id;
         public final long userId;
-        public final OrderState orderState;
+        public OrderState orderState;
 
         public Order(List<String> items,
                      long id,
@@ -101,6 +115,18 @@ public class OrderRegistry extends AbstractBehavior<OrderRegistry.Command> {
             this.userId = userId;
             this.id = 0;
             this.orderState = OrderState.CREATED;
+        }
+
+        public void markAsPaid() {
+            this.orderState = OrderState.PAID;
+        }
+
+        public void markAsInFulfillment() {
+            this.orderState = OrderState.IN_FULFILLMENT;
+        }
+
+        public void markAsClosed() {
+            this.orderState = OrderState.CLOSED;
         }
     }
 
@@ -146,8 +172,9 @@ public class OrderRegistry extends AbstractBehavior<OrderRegistry.Command> {
         return newReceiveBuilder()
                 .onMessage(GetOrders.class, this::onGetOrders)
                 .onMessage(CreateOrder.class, this::onCreateOrder)
-                .onMessage(GetOrder.class, this::onGetUser)
+                .onMessage(GetOrder.class, this::onGetOrder)
                 .onMessage(DeleteOrder.class, this::onDeleteUser)
+                .onMessage(ConfirmOrder.class, this::onConfirmOrder)
                 .build();
     }
 
@@ -165,11 +192,28 @@ public class OrderRegistry extends AbstractBehavior<OrderRegistry.Command> {
         return this;
     }
 
-    private Behavior<Command> onGetUser(GetOrder command) {
+    private Behavior<Command> onGetOrder(GetOrder command) {
         Optional<Order> maybeUser = orders.stream()
                 .filter(order -> order.id == command.id)
                 .findFirst();
         command.replyTo.tell(new GetOrderResponse(maybeUser));
+        return this;
+    }
+
+    private Behavior<Command> onConfirmOrder(ConfirmOrder command) {
+        Optional<Order> maybeOrder = orders.stream()
+                .filter(order -> order.id == command.id)
+                .findFirst();
+
+        if (maybeOrder.isEmpty()) {
+            log.info("Order with id {} not found", command.id);
+            command.replyTo.tell(new ActionPerformed(String.format("Order with id %d not found", command.id)));
+            return this;
+        }
+
+        log.info("Confirming order with id {}", command.id);
+        maybeOrder.get().markAsPaid();
+        command.replyTo.tell(new ActionPerformed(String.format("Order with id %d confirmed as paid, moving to in paid state", command.id)));
         return this;
     }
 

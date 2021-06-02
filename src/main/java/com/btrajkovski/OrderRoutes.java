@@ -50,6 +50,10 @@ public class OrderRoutes {
         return AskPattern.ask(orderRegistryActor, ref -> new OrderRegistry.CreateOrder(order, ref), askTimeout, scheduler);
     }
 
+    private CompletionStage<OrderRegistry.ActionPerformed> confirmOrder(long id) {
+        return AskPattern.ask(orderRegistryActor, ref -> new OrderRegistry.ConfirmOrder(id, ref), askTimeout, scheduler);
+    }
+
     /**
      * This method creates one route (of possibly many more that will be part of your Web App)
      */
@@ -79,12 +83,12 @@ public class OrderRoutes {
                         ),
                         //#users-get-delete
                         //#users-get-post
-                        path(PathMatchers.segment(), (String id) ->
+                        path(PathMatchers.longSegment(), (Long id) ->
                                 concat(
                                         get(() ->
                                                         //#retrieve-user-info
                                                         rejectEmptyResponse(() ->
-                                                                onSuccess(getOrder(Long.parseLong(id)), performed ->
+                                                                onSuccess(getOrder(id), performed ->
                                                                         complete(StatusCodes.OK, performed.maybeUser, Jackson.marshaller())
                                                                 )
                                                         )
@@ -92,7 +96,7 @@ public class OrderRoutes {
                                         ),
                                         delete(() ->
                                                         //#users-delete-logic
-                                                        onSuccess(deleteOrder(Long.parseLong(id)), performed -> {
+                                                        onSuccess(deleteOrder(id), performed -> {
                                                                     log.info("Delete result: {}", performed.description);
                                                                     return complete(StatusCodes.OK, performed, Jackson.marshaller());
                                                                 }
@@ -100,8 +104,19 @@ public class OrderRoutes {
                                                 //#users-delete-logic
                                         )
                                 )
-                        )
+                        ),
                         //#users-get-post
+                        path(PathMatchers.longSegment().slash("confirm"), (Long id) ->
+                                        get(() ->
+                                                        //#retrieve-user-info
+                                                        rejectEmptyResponse(() ->
+                                                                onSuccess(confirmOrder(id), performed ->
+                                                                        complete(StatusCodes.OK, performed, Jackson.marshaller())
+                                                                )
+                                                        )
+                                                //#retrieve-user-info
+                                        )
+                        )
                 )
         );
     }

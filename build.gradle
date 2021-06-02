@@ -18,10 +18,14 @@ def versions = [
         ScalaBinary: "2.13"
 ]
 dependencies {
+//    implementation platform("com.typesafe.akka:akka-bom_${versions.ScalaBinary}:${versions.AkkaHttpVersion}")
     implementation platform("com.typesafe.akka:akka-http-bom_${versions.ScalaBinary}:${versions.AkkaHttpVersion}")
 
     implementation "com.typesafe.akka:akka-http_${versions.ScalaBinary}"
-    implementation "com.typesafe.akka:akka-http-jackson_${versions.ScalaBinary}"
+    implementation "com.typesafe.akka:akka-http-jackson_${versions.ScalaBinary}:${versions.AkkaVersion}"
+//    implementation "com.typesafe.akka:akka-persistence_${versions.ScalaBinary}:${versions.AkkaVersion}"
+//    implementation "com.typesafe.akka:akka-persistence-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
+//    implementation "com.typesafe.akka:akka-serialization-jackson_${versions.ScalaBinary}:${versions.AkkaVersion}"
     implementation "com.typesafe.akka:akka-actor-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
     implementation "com.typesafe.akka:akka-stream_${versions.ScalaBinary}:${versions.AkkaVersion}"
     implementation 'ch.qos.logback:logback-classic:1.2.3'
