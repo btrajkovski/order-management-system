@@ -35,8 +35,8 @@ public class QuickstartApp {
     public static void main(String[] args) throws Exception {
         //#server-bootstrapping
         Behavior<NotUsed> rootBehavior = Behaviors.setup(context -> {
-            ActorRef<OrderRegistry.Command> orderRegistryActor =
-                    context.spawn(OrderRegistry.create(), "OrderRegistry");
+            ActorRef<Orders.Command> orderRegistryActor =
+                    context.spawn(Orders.create(), "Orders");
 
             OrderRoutes orderRoutes = new OrderRoutes(context.getSystem(), orderRegistryActor);
             startHttpServer(orderRoutes.userRoutes(), context.getSystem());

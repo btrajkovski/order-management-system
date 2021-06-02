@@ -22,7 +22,7 @@ public class OrderTest {
     public void shouldAddItem() {
         ActorRef<Orders.Command> orders = testKit.spawn(Orders.create());
         TestProbe<Orders.OrderCreated> probe = testKit.createTestProbe();
-        orders.tell(new Orders.CreateOrder("something", null));
+//        orders.tell(new Orders.CreateOrder("something", null));
         Orders.OrderCreated orderCreated = probe.receiveMessage();
         Assert.assertEquals("something", orderCreated.data);
 //        cart.tell(new ShoppingCart.AddItem("foo", 42, probe.getRef()));

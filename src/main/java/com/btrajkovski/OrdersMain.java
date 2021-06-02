@@ -6,6 +6,7 @@ import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.AskPattern;
 
 import java.time.Duration;
+import java.util.Random;
 import java.util.concurrent.CompletionStage;
 
 public class OrdersMain {
@@ -15,27 +16,28 @@ public class OrdersMain {
         ActorSystem<Orders.Command> system = ActorSystem.create(behavior, "orders");
         final ActorRef<Orders.Command> ref = system;
 
-        CompletionStage<OrderCommandReply> result1 = AskPattern.ask(
+        CompletionStage<Orders.OrderCreated> resultOrderCreated = AskPattern.ask(
                 ref,
-                rep -> new Orders.CreateOrder("data", rep),
-                Duration.ofSeconds(3),
+                rep -> new Orders.CreateOrder(new Order("Asus GTX 3060 " + new Random().nextInt(2000) + "$", 1), rep),
+                Duration.ofSeconds(5),
                 system.scheduler()
         );
-        result1.whenComplete(
+        resultOrderCreated.whenComplete(
                 (reply, failure) -> {
+                    System.out.println("REPLY");
                     System.out.println(reply);
-                }
-        );
-
-        CompletionStage<Orders.OrderPaid> result2 = AskPattern.ask(
-                ref,
-                rep -> new Orders.PayOrder("data", rep),
-                Duration.ofSeconds(3),
-                system.scheduler()
-        );
-        result2.whenComplete(
-                (reply, failure) -> {
-                    System.out.println(reply);
+                    CompletionStage<Orders.OrderPaid> resultOrderPaid = AskPattern.ask(
+                            ref,
+                            rep -> new Orders.PayOrder(reply.data.orderUuid, rep),
+                            Duration.ofSeconds(5),
+                            system.scheduler()
+                    );
+                    resultOrderPaid.whenComplete(
+                            (reply2, failure2) -> {
+                                System.out.println("Reply paid");
+                                System.out.println(reply2);
+                            }
+                    );
                 }
         );
 

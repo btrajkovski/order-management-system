@@ -13,9 +13,9 @@ repositories {
 }
 
 def versions = [
-        AkkaVersion: "2.6.14",
+        AkkaVersion    : "2.6.14",
         AkkaHttpVersion: "10.2.4",
-        ScalaBinary: "2.13"
+        ScalaBinary    : "2.13"
 ]
 dependencies {
 //    implementation platform("com.typesafe.akka:akka-bom_${versions.ScalaBinary}:${versions.AkkaHttpVersion}")
@@ -30,10 +30,14 @@ dependencies {
     implementation "com.typesafe.akka:akka-stream_${versions.ScalaBinary}:${versions.AkkaVersion}"
     implementation 'ch.qos.logback:logback-classic:1.2.3'
     implementation "org.fusesource.leveldbjni:leveldbjni-all:1.8"
-//    testImplementation "com.typesafe.akka:akka-http-testkit_${versions.ScalaBinary}:${versions.AkkaVersion}"
+    compileOnly 'org.projectlombok:lombok:1.18.20'
+    annotationProcessor 'org.projectlombok:lombok:1.18.20'
+
     testImplementation "com.typesafe.akka:akka-actor-testkit-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
     testImplementation "com.typesafe.akka:akka-persistence-testkit_${versions.ScalaBinary}:${versions.AkkaVersion}"
     testImplementation 'junit:junit:4.12'
+    testCompileOnly 'org.projectlombok:lombok:1.18.20'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.20'
 }
 
 mainClassName = "com.example.QuickstartApp"

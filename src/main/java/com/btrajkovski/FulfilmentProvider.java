@@ -1,5 +1,6 @@
 package com.btrajkovski;
 
+import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
@@ -29,8 +30,12 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
     }
 
     public static class ShipOrder implements Command {
+        private final String orderUuid;
+        public final ActorRef<Orders.Command> actorReplyTo;
 
-        public ShipOrder() {
+        public ShipOrder(String orderUuid, ActorRef<Orders.Command> actorReplyTo) {
+            this.orderUuid = orderUuid;
+            this.actorReplyTo = actorReplyTo;
         }
     }
 
@@ -88,13 +93,23 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
         boolean shipSuccessfully = new Random().nextBoolean();
 
         context.getLog().info("Shipping order with status {}", shipSuccessfully);
+        command.actorReplyTo.tell(new Orders.OrderInFulfilment(command.orderUuid));
 
+        try {
+            Thread.sleep(1000 * 10L);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         if (shipSuccessfully) {
             return Effect()
-                    .persist(new OrderShipped(true));
+                    .persist(new OrderShipped(true))
+                    .thenRun(() -> command.actorReplyTo.tell(new Orders.CloseOrder(command.orderUuid, true)))
+                    .thenStop();
         } else {
             return Effect()
-                    .persist(new ShipmentFailed(false));
+                    .persist(new ShipmentFailed(false))
+                    .thenRun(() -> command.actorReplyTo.tell(new Orders.CloseOrder(command.orderUuid, false)))
+                    .thenStop();
         }
     }
 }
