@@ -18,25 +18,31 @@ def versions = [
         ScalaBinary    : "2.13"
 ]
 dependencies {
-//    implementation platform("com.typesafe.akka:akka-bom_${versions.ScalaBinary}:${versions.AkkaHttpVersion}")
+    implementation platform("com.typesafe.akka:akka-bom_${versions.ScalaBinary}:${versions.AkkaVersion}")
     implementation platform("com.typesafe.akka:akka-http-bom_${versions.ScalaBinary}:${versions.AkkaHttpVersion}")
 
     implementation "com.typesafe.akka:akka-http_${versions.ScalaBinary}"
-    implementation "com.typesafe.akka:akka-http-jackson_${versions.ScalaBinary}:${versions.AkkaVersion}"
-//    implementation "com.typesafe.akka:akka-persistence_${versions.ScalaBinary}:${versions.AkkaVersion}"
-    implementation "com.typesafe.akka:akka-persistence-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
-    implementation "com.typesafe.akka:akka-serialization-jackson_${versions.ScalaBinary}:${versions.AkkaVersion}"
-    implementation "com.typesafe.akka:akka-actor-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
-    implementation "com.typesafe.akka:akka-stream_${versions.ScalaBinary}:${versions.AkkaVersion}"
+    implementation "com.typesafe.akka:akka-http-jackson_${versions.ScalaBinary}"
+    implementation "com.typesafe.akka:akka-persistence-typed_${versions.ScalaBinary}"
+    implementation "com.typesafe.akka:akka-serialization-jackson_${versions.ScalaBinary}"
+    implementation "com.typesafe.akka:akka-actor-typed_${versions.ScalaBinary}"
+    implementation "com.typesafe.akka:akka-stream_${versions.ScalaBinary}"
+    implementation "com.fasterxml.jackson.module:jackson-module-scala_${versions.ScalaBinary}:2.12.3"
+
     implementation 'ch.qos.logback:logback-classic:1.2.3'
     implementation "org.fusesource.leveldbjni:leveldbjni-all:1.8"
     compileOnly 'org.projectlombok:lombok:1.18.20'
     annotationProcessor 'org.projectlombok:lombok:1.18.20'
 
-    testImplementation "com.typesafe.akka:akka-actor-testkit-typed_${versions.ScalaBinary}:${versions.AkkaVersion}"
-    testImplementation "com.typesafe.akka:akka-persistence-testkit_${versions.ScalaBinary}:${versions.AkkaVersion}"
+    testImplementation "org.assertj:assertj-core:3.11.1"
+    testImplementation "com.typesafe.akka:akka-actor-testkit-typed_${versions.ScalaBinary}"
+    testImplementation "com.typesafe.akka:akka-persistence-testkit_${versions.ScalaBinary}"
+    testImplementation "com.typesafe.akka:akka-stream-testkit_${versions.ScalaBinary}"
+    testImplementation "com.typesafe.akka:akka-http-testkit_${versions.ScalaBinary}"
+    testImplementation "com.typesafe.akka:akka-persistence-testkit_${versions.ScalaBinary}"
     testImplementation 'junit:junit:4.12'
     testCompileOnly 'org.projectlombok:lombok:1.18.20'
+
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.20'
 }
 

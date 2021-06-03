@@ -8,6 +8,9 @@ import akka.http.javadsl.ServerBinding;
 import akka.http.javadsl.server.Route;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.actor.typed.ActorSystem;
+import com.btrajkovski.orders.OrderEntity;
+import com.btrajkovski.router.OrderRoutes;
+
 import java.net.InetSocketAddress;
 import java.util.concurrent.CompletionStage;
 
@@ -35,8 +38,8 @@ public class QuickstartApp {
     public static void main(String[] args) throws Exception {
         //#server-bootstrapping
         Behavior<NotUsed> rootBehavior = Behaviors.setup(context -> {
-            ActorRef<Orders.Command> orderRegistryActor =
-                    context.spawn(Orders.create(), "Orders");
+            ActorRef<OrderEntity.Command> orderRegistryActor =
+                    context.spawn(OrderEntity.create(), "Orders");
 
             OrderRoutes orderRoutes = new OrderRoutes(context.getSystem(), orderRegistryActor);
             startHttpServer(orderRoutes.userRoutes(), context.getSystem());

@@ -1,4 +1,4 @@
-package com.btrajkovski;
+package com.btrajkovski.orders;
 
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
@@ -9,13 +9,16 @@ import akka.persistence.typed.javadsl.CommandHandler;
 import akka.persistence.typed.javadsl.Effect;
 import akka.persistence.typed.javadsl.EventHandler;
 import akka.persistence.typed.javadsl.EventSourcedBehavior;
+import com.btrajkovski.serializers.JsonSerializable;
 import com.fasterxml.jackson.annotation.JsonCreator;
 
+import java.time.Duration;
 import java.util.Random;
 
 public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.Command, FulfilmentProvider.Event, FulfilmentProvider.State> {
     // this makes the context available to the command handler etc.
     private final ActorContext<Command> context;
+    private final Duration shippingDelay;
 
     interface Command extends JsonSerializable {
     }
@@ -31,9 +34,9 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
 
     public static class ShipOrder implements Command {
         private final String orderUuid;
-        public final ActorRef<Orders.Command> actorReplyTo;
+        public final ActorRef<OrderEntity.Command> actorReplyTo;
 
-        public ShipOrder(String orderUuid, ActorRef<Orders.Command> actorReplyTo) {
+        public ShipOrder(String orderUuid, ActorRef<OrderEntity.Command> actorReplyTo) {
             this.orderUuid = orderUuid;
             this.actorReplyTo = actorReplyTo;
         }
@@ -64,6 +67,7 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
     private FulfilmentProvider(PersistenceId persistenceId, ActorContext<Command> ctx) {
         super(persistenceId);
         this.context = ctx;
+        this.shippingDelay = ctx.getSystem().settings().config().getDuration("my-app.fulfilment-provider.shipping-delay");
     }
 
     @Override
@@ -93,22 +97,24 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
         boolean shipSuccessfully = new Random().nextBoolean();
 
         context.getLog().info("Shipping order with status {}", shipSuccessfully);
-        command.actorReplyTo.tell(new Orders.OrderInFulfilment(command.orderUuid));
+        command.actorReplyTo.tell(new OrderEntity.OrderInFulfilment(command.orderUuid));
+
+        context.getLog().info("Waiting {} seconds before shipping the item", shippingDelay.getSeconds());
 
         try {
-            Thread.sleep(1000 * 10L);
+            Thread.sleep(shippingDelay.toMillis());
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
         if (shipSuccessfully) {
             return Effect()
                     .persist(new OrderShipped(true))
-                    .thenRun(() -> command.actorReplyTo.tell(new Orders.CloseOrder(command.orderUuid, true)))
+                    .thenRun(() -> command.actorReplyTo.tell(new OrderEntity.CloseOrder(command.orderUuid, true)))
                     .thenStop();
         } else {
             return Effect()
                     .persist(new ShipmentFailed(false))
-                    .thenRun(() -> command.actorReplyTo.tell(new Orders.CloseOrder(command.orderUuid, false)))
+                    .thenRun(() -> command.actorReplyTo.tell(new OrderEntity.CloseOrder(command.orderUuid, false)))
                     .thenStop();
         }
     }

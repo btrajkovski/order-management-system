@@ -1,4 +1,4 @@
-package com.btrajkovski;
+package com.btrajkovski.orders;
 
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
@@ -9,6 +9,7 @@ import akka.persistence.typed.javadsl.CommandHandler;
 import akka.persistence.typed.javadsl.Effect;
 import akka.persistence.typed.javadsl.EventHandler;
 import akka.persistence.typed.javadsl.EventSourcedBehavior;
+import com.btrajkovski.serializers.JsonSerializable;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Value;
@@ -17,15 +18,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class Orders extends EventSourcedBehavior<Orders.Command, Orders.Event, Orders.State> {
+public class OrderEntity extends EventSourcedBehavior<OrderEntity.Command, OrderEntity.Event, OrderEntity.State> {
 
     // this makes the context available to the command handler etc.
     private final ActorContext<Command> context;
 
-    interface Command extends JsonSerializable {
+    public interface Command extends JsonSerializable {
     }
 
-    interface Event extends JsonSerializable {
+    public interface Event extends JsonSerializable {
     }
 
     public static class State {
@@ -145,7 +146,8 @@ public class Orders extends EventSourcedBehavior<Orders.Command, Orders.Event, O
     public static class OrdersResponse {
         public final List<Order> orders;
 
-        public OrdersResponse(List<Order> orders) {
+        @JsonCreator
+        public OrdersResponse(@JsonProperty("orders") List<Order> orders) {
             this.orders = orders;
         }
     }
@@ -191,10 +193,10 @@ public class Orders extends EventSourcedBehavior<Orders.Command, Orders.Event, O
     }
 
     public static Behavior<Command> create() {
-        return Behaviors.setup(ctx -> new Orders(PersistenceId.ofUniqueId("orders"), ctx));
+        return Behaviors.setup(ctx -> new OrderEntity(PersistenceId.ofUniqueId("orders"), ctx));
     }
 
-    private Orders(PersistenceId persistenceId, ActorContext<Command> ctx) {
+    private OrderEntity(PersistenceId persistenceId, ActorContext<Command> ctx) {
         super(persistenceId);
         this.context = ctx;
     }
