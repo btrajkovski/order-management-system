@@ -1,18 +1,19 @@
 package com.btrajkovski.router;
 
-import akka.actor.typed.ActorRef;
 import akka.actor.typed.ActorSystem;
-import akka.actor.typed.Scheduler;
-import akka.actor.typed.javadsl.AskPattern;
+import akka.cluster.sharding.typed.javadsl.ClusterSharding;
+import akka.cluster.sharding.typed.javadsl.EntityRef;
 import akka.http.javadsl.marshallers.jackson.Jackson;
 import akka.http.javadsl.model.StatusCodes;
 import akka.http.javadsl.server.*;
-import com.btrajkovski.orders.Order;
-import com.btrajkovski.orders.OrderEntity;
+import akka.pattern.StatusReply;
+import com.btrajkovski.orders.CreateOrderRequest;
+import com.btrajkovski.orders.OrderEntity2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
 
@@ -25,36 +26,41 @@ import static akka.http.javadsl.server.Directives.*;
 public class OrderRoutes {
     //#user-routes-class
     private static final Logger log = LoggerFactory.getLogger(OrderRoutes.class);
-    //    private final ActorRef<OrderRegistry.Command> orderRegistryActor;
-    private final ActorRef<OrderEntity.Command> ordersActor;
     private final Duration askTimeout;
-    private final Scheduler scheduler;
+    private final ClusterSharding sharding;
+    private final ActorSystem<?> system;
 
-    public OrderRoutes(ActorSystem<?> system, ActorRef<OrderEntity.Command> ordersActor) {
-        this.ordersActor = ordersActor;
-        scheduler = system.scheduler();
+    public OrderRoutes(ActorSystem<?> system) {
+        this.system = system;
+
         askTimeout = system.settings().config().getDuration("my-app.routes.ask-timeout");
+        sharding = ClusterSharding.get(system);
     }
 
-    private CompletionStage<Order> getOrder(String orderUuid) {
-        return AskPattern.ask(ordersActor, ref -> new OrderEntity.GetOrder(orderUuid, ref), askTimeout, scheduler);
+    private CompletionStage<OrderEntity2.OrderSummary> getOrder(String id) {
+        EntityRef<OrderEntity2.Command> entityRef = sharding.entityRefFor(OrderEntity2.ENTITY_KEY, id);
+        return entityRef.askWithStatus(replyTo -> new OrderEntity2.GetOrder(replyTo), askTimeout);
     }
 
-//    private CompletionStage<OrderRegistry.ActionPerformed> deleteOrder(long id) {
-//        return AskPattern.ask(ordersActor, ref -> new OrderRegistry.DeleteOrder(id, ref), askTimeout, scheduler);
-//    }
-
-    private CompletionStage<OrderEntity.OrdersResponse> getOrders() {
-        return AskPattern.ask(ordersActor, OrderEntity.GetOrders::new, askTimeout, scheduler);
+    private CompletionStage<OrderEntity2.OrderSummary> createOrder(CreateOrderRequest createOrderRequest) {
+        String orderId = UUID.randomUUID().toString();
+        EntityRef<OrderEntity2.Command> entityRef = sharding.entityRefFor(OrderEntity2.ENTITY_KEY, orderId);
+        return entityRef.askWithStatus(replyTo -> new OrderEntity2.CreateOrder(createOrderRequest.item, replyTo), askTimeout);
     }
 
-    private CompletionStage<OrderEntity.OrderCreated> createOrder(Order order) {
-        return AskPattern.ask(ordersActor, ref -> new OrderEntity.CreateOrder(order, ref), askTimeout, scheduler);
+    private CompletionStage<OrderEntity2.OrderSummary> confirmOrder(String orderUuid) {
+        EntityRef<OrderEntity2.Command> entityRef = sharding.entityRefFor(OrderEntity2.ENTITY_KEY, orderUuid);
+        return entityRef.askWithStatus(replyTo -> new OrderEntity2.PayOrder(replyTo), askTimeout);
     }
 
-    private CompletionStage<OrderEntity.OrderPaid> confirmOrder(String orderUuid) {
-        return AskPattern.ask(ordersActor, ref -> new OrderEntity.PayOrder(orderUuid, ref), askTimeout, scheduler);
-    }
+    final ExceptionHandler exceptionHandler = ExceptionHandler.newBuilder()
+            .match(StatusReply.ErrorMessage.class, exp ->
+                    complete(StatusCodes.BAD_REQUEST, exp.getMessage())
+            )
+            .match(Exception.class, exp ->
+                    complete(StatusCodes.INTERNAL_SERVER_ERROR, exp.getMessage())
+            )
+            .build();
 
     final RejectionHandler rejectionHandler = RejectionHandler.newBuilder()
             .handle(Rejection.class, rej ->
@@ -72,7 +78,7 @@ public class OrderRoutes {
                         .collect(Collectors.joining(" or "));
                 return complete(StatusCodes.METHOD_NOT_ALLOWED, "Can't do that! Supported: " + supported + "!");
             })
-            .handleNotFound(complete(StatusCodes.NOT_FOUND, "Not here!"))
+//            .handleNotFound(complete(StatusCodes.NOT_FOUND, "Not here!"))
             .build();
 
     /**
@@ -82,66 +88,48 @@ public class OrderRoutes {
     public Route userRoutes() {
         return handleRejections(rejectionHandler,
                 () -> pathPrefix("orders", () ->
-                                concat(
-                                        //#users-get-delete
-                                        pathEnd(() ->
-                                                concat(
-                                                        get(() ->
-                                                                onSuccess(getOrders(),
-                                                                        orders -> complete(StatusCodes.OK, orders, Jackson.marshaller())
-                                                                )
-                                                        ),
-                                                        post(() ->
-                                                                entity(
-                                                                        Jackson.unmarshaller(Order.class),
-                                                                        order ->
-                                                                                onSuccess(createOrder(order), performed -> {
-                                                                                    log.info("Create result: {}", performed.data);
-                                                                                    return complete(StatusCodes.CREATED, performed, Jackson.marshaller());
-                                                                                })
-                                                                )
-                                                        )
-                                                )
-                                        ),
-                                        //#users-get-delete
-                                        //#users-get-post
-                                        path(PathMatchers.segment(), (String orderUuid) ->
-                                                        concat(
-                                                                get(() ->
-                                                                                //#retrieve-user-info
-                                                                                rejectEmptyResponse(() ->
-                                                                                        onSuccess(getOrder(orderUuid), performed -> {
-                                                                                                    log.info("Get order by uuid {}", orderUuid);
-                                                                                                    return complete(StatusCodes.OK, performed, Jackson.marshaller());
-                                                                                                }
-                                                                                        )
-                                                                                )
-                                                                        //#retrieve-user-info
-                                                                )
-//                                        delete(() ->
-//                                                        //#users-delete-logic
-//                                                        onSuccess(deleteOrder(id), performed -> {
-//                                                                    log.info("Delete result: {}", performed.description);
-//                                                                    return complete(StatusCodes.OK, performed, Jackson.marshaller());
-//                                                                }
-//                                                        )
-//                                                //#users-delete-logic
-//                                        )
-                                                        )
-                                        ),
-                                        //#users-get-post
-                                        path(PathMatchers.segment().slash("confirm"), (String orderUuid) ->
-                                                get(() ->
-                                                                //#retrieve-user-info
-                                                                rejectEmptyResponse(() ->
-                                                                        onSuccess(confirmOrder(orderUuid), performed ->
-                                                                                complete(StatusCodes.OK, performed, Jackson.marshaller())
-                                                                        )
-                                                                )
-                                                        //#retrieve-user-info
+                        concat(
+                                //#users-get-delete
+                                pathEnd(() ->
+                                        post(() ->
+                                                entity(
+                                                        Jackson.unmarshaller(CreateOrderRequest.class),
+                                                        order ->
+                                                                onSuccess(createOrder(order), performed -> {
+                                                                    log.info("Create result: {}", performed);
+                                                                    return complete(StatusCodes.CREATED, performed, Jackson.marshaller());
+                                                                })
                                                 )
                                         )
+                                ),
+                                //#users-get-delete
+                                //#users-get-post
+                                path(PathMatchers.segment(), (String orderUuid) ->
+                                        get(() ->
+                                                        //#retrieve-user-info
+                                                        rejectEmptyResponse(() ->
+                                                                onSuccess(getOrder(orderUuid), performed -> {
+                                                                            log.info("Get order by uuid {}", orderUuid);
+                                                                            return complete(StatusCodes.OK, performed, Jackson.marshaller());
+                                                                        }
+                                                                )
+                                                        )
+                                                //#retrieve-user-info
+                                        )
+                                ),
+                                //#users-get-post
+                                path(PathMatchers.segment().slash("confirm"), (String orderUuid) ->
+                                        get(() ->
+                                                        //#retrieve-user-info
+                                                        rejectEmptyResponse(() ->
+                                                                onSuccess(confirmOrder(orderUuid), performed ->
+                                                                        complete(StatusCodes.OK, performed, Jackson.marshaller())
+                                                                )
+                                                        )
+                                                //#retrieve-user-info
+                                        )
                                 )
+                        )
                 ));
     }
     //#all-routes

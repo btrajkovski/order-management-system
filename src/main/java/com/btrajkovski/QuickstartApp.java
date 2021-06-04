@@ -1,14 +1,15 @@
 package com.btrajkovski;
 
 import akka.NotUsed;
-import akka.actor.typed.ActorRef;
+import akka.actor.typed.ActorSystem;
 import akka.actor.typed.Behavior;
+import akka.actor.typed.javadsl.Behaviors;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.ServerBinding;
 import akka.http.javadsl.server.Route;
-import akka.actor.typed.javadsl.Behaviors;
-import akka.actor.typed.ActorSystem;
-import com.btrajkovski.orders.OrderEntity;
+import akka.management.cluster.bootstrap.ClusterBootstrap;
+import akka.management.javadsl.AkkaManagement;
+import com.btrajkovski.orders.OrderEntity2;
 import com.btrajkovski.router.OrderRoutes;
 
 import java.net.InetSocketAddress;
@@ -37,11 +38,15 @@ public class QuickstartApp {
 
     public static void main(String[] args) throws Exception {
         //#server-bootstrapping
-        Behavior<NotUsed> rootBehavior = Behaviors.setup(context -> {
-            ActorRef<OrderEntity.Command> orderRegistryActor =
-                    context.spawn(OrderEntity.create(), "Orders");
 
-            OrderRoutes orderRoutes = new OrderRoutes(context.getSystem(), orderRegistryActor);
+
+        Behavior<NotUsed> rootBehavior = Behaviors.setup(context -> {
+
+            AkkaManagement.get(context.getSystem()).start();
+            ClusterBootstrap.get(context.getSystem()).start();
+            OrderEntity2.init(context.getSystem());
+
+            OrderRoutes orderRoutes = new OrderRoutes(context.getSystem());
             startHttpServer(orderRoutes.userRoutes(), context.getSystem());
 
             return Behaviors.empty();

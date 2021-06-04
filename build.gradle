@@ -15,11 +15,13 @@ repositories {
 def versions = [
         AkkaVersion    : "2.6.14",
         AkkaHttpVersion: "10.2.4",
+        AkkaPlatformVersion: "0.1.5",
         ScalaBinary    : "2.13"
 ]
 dependencies {
     implementation platform("com.typesafe.akka:akka-bom_${versions.ScalaBinary}:${versions.AkkaVersion}")
     implementation platform("com.typesafe.akka:akka-http-bom_${versions.ScalaBinary}:${versions.AkkaHttpVersion}")
+    implementation platform("com.lightbend.akka:akka-platform-dependencies_${versions.ScalaBinary}:${versions.AkkaPlatformVersion}")
 
     implementation "com.typesafe.akka:akka-http_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-http-jackson_${versions.ScalaBinary}"
@@ -27,8 +29,15 @@ dependencies {
     implementation "com.typesafe.akka:akka-serialization-jackson_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-actor-typed_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-stream_${versions.ScalaBinary}"
-    implementation "com.fasterxml.jackson.module:jackson-module-scala_${versions.ScalaBinary}:2.12.3"
+    implementation "com.typesafe.akka:akka-cluster-typed_${versions.ScalaBinary}"
+    implementation "com.typesafe.akka:akka-cluster-sharding-typed_${versions.ScalaBinary}"
+    implementation "com.typesafe.akka:akka-cluster-tools_${versions.ScalaBinary}"
+    implementation "com.typesafe.akka:akka-cluster-tools_${versions.ScalaBinary}"
+    implementation "com.lightbend.akka:akka-projection-jdbc_${versions.ScalaBinary}"
+    implementation "com.lightbend.akka.management:akka-management-cluster-http_${versions.ScalaBinary}"
+    implementation "com.lightbend.akka.management:akka-management-cluster-bootstrap_${versions.ScalaBinary}"
 
+    implementation "com.fasterxml.jackson.module:jackson-module-scala_${versions.ScalaBinary}:2.12.3"
     implementation 'ch.qos.logback:logback-classic:1.2.3'
     implementation "org.fusesource.leveldbjni:leveldbjni-all:1.8"
     compileOnly 'org.projectlombok:lombok:1.18.20'
@@ -50,6 +59,10 @@ mainClassName = "com.example.QuickstartApp"
 
 run {
     standardInput = System.in
+}
+
+test {
+    testLogging.showStandardStreams = true
 }
 
 idea {

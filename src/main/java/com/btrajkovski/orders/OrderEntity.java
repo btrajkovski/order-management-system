@@ -4,6 +4,7 @@ import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
+import akka.cluster.sharding.typed.javadsl.EntityTypeKey;
 import akka.persistence.typed.PersistenceId;
 import akka.persistence.typed.javadsl.*;
 import com.btrajkovski.serializers.JsonSerializable;
