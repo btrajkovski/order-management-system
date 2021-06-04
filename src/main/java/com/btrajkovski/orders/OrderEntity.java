@@ -1,22 +1,22 @@
 package com.btrajkovski.orders;
 
 import akka.actor.typed.ActorRef;
+import akka.actor.typed.ActorSystem;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
+import akka.cluster.sharding.typed.javadsl.ClusterSharding;
+import akka.cluster.sharding.typed.javadsl.Entity;
 import akka.cluster.sharding.typed.javadsl.EntityTypeKey;
+import akka.pattern.StatusReply;
 import akka.persistence.typed.PersistenceId;
 import akka.persistence.typed.javadsl.*;
 import com.btrajkovski.serializers.JsonSerializable;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Value;
+import lombok.ToString;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-public class OrderEntity extends EventSourcedBehavior<OrderEntity.Command, OrderEntity.Event, OrderEntity.State> {
+public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEntity.Command, OrderEntity.Event, OrderEntity.State> {
 
     // this makes the context available to the command handler etc.
     private final ActorContext<Command> context;
@@ -24,178 +24,161 @@ public class OrderEntity extends EventSourcedBehavior<OrderEntity.Command, Order
     public interface Command extends JsonSerializable {
     }
 
-    public interface Event extends JsonSerializable {
+    public abstract static class Event implements JsonSerializable {
+        public final String orderId;
+
+        @JsonCreator
+        public Event(String orderId) {
+            this.orderId = orderId;
+        }
     }
 
     public static class State {
-        private final List<Order> orders;
-
-        private State(List<Order> orders) {
-            this.orders = orders;
-        }
+        public final String item;
+        public final OrderStatus status;
+        public final Boolean isShippedSuccessfully;
 
         public State() {
-            this.orders = new ArrayList<>();
+            this(null, null, null);
         }
 
-        public State addOrder(Order order) {
-            List<Order> newOrders = new ArrayList<>(orders);
-            newOrders.add(order);
-            return new State(newOrders);
+        public State(String item, OrderStatus status, Boolean isShippedSuccessfully) {
+            this.item = item;
+            this.status = status;
+            this.isShippedSuccessfully = isShippedSuccessfully;
         }
 
-        public Order getOrder(String orderUuid) {
-            return orders.stream()
-                    .filter(order -> order.orderUuid.equals(orderUuid))
-                    .findFirst()
-                    .orElse(null);
+        public State markOrderAsPaid() {
+            return new State(item, OrderStatus.PAID, isShippedSuccessfully);
         }
 
-        public State markOrderAsPaid(String orderUuid) {
-            List<Order> newOrders = new ArrayList<>(orders);
-            newOrders.stream()
-                    .filter(order -> order.orderUuid.equals(orderUuid))
-                    .findFirst()
-                    // TODO check previous state
-                    .ifPresent(Order::markAsPaid);
-
-            return new State(newOrders);
+        public State markOrderAsInFulfilment() {
+            return new State(item, OrderStatus.IN_FULFILLMENT, isShippedSuccessfully);
         }
 
-        public State markOrderAsInFulfilment(String orderUuid) {
-            List<Order> newOrders = new ArrayList<>(orders);
-            newOrders.stream()
-                    .filter(order -> order.orderUuid.equals(orderUuid))
-                    .findFirst()
-                    .ifPresent(Order::markAsInFulfillment);
-
-            return new State(newOrders);
+        public State markOrderAsClosed(boolean isShippedSuccessfully) {
+            return new State(item, OrderStatus.CLOSED, isShippedSuccessfully);
         }
 
-        public State markOrderAsClosed(String orderUuid, boolean isShippedSuccessfully) {
-            List<Order> newOrders = new ArrayList<>(orders);
-            newOrders.stream()
-                    .filter(order -> order.orderUuid.equals(orderUuid))
-                    .findFirst()
-                    .ifPresent(order -> order.markAsClosed(isShippedSuccessfully));
-
-            return new State(newOrders);
+        public OrderSummary toSummary(String orderId) {
+            return new OrderSummary(orderId, item, status, isShippedSuccessfully);
         }
-
     }
+
+    public enum OrderStatus {
+        CREATED, PAID, IN_FULFILLMENT, CLOSED
+    }
+
+    public static final EntityTypeKey<Command> ENTITY_KEY =
+            EntityTypeKey.create(Command.class, "OrderEntity");
 
     public static class CreateOrder implements Command {
-        public final Order data;
-        public final ActorRef<OrderCreated> actorReplyTo;
+        public final String item;
+        public final ActorRef<StatusReply<OrderSummary>> replyTo;
 
-        public CreateOrder(Order data, ActorRef<OrderCreated> actorReplyTo) {
-            this.data = data;
-            this.actorReplyTo = actorReplyTo;
-        }
-    }
-
-    public static class GetOrders implements Command {
-        public final ActorRef<OrdersResponse> actorReplyTo;
-
-        public GetOrders(ActorRef<OrdersResponse> actorReplyTo) {
-            this.actorReplyTo = actorReplyTo;
+        public CreateOrder(String item, ActorRef<StatusReply<OrderSummary>> replyTo) {
+            this.item = item;
+            this.replyTo = replyTo;
         }
     }
 
     public static class GetOrder implements Command {
-        public final String orderUuid;
-        public final ActorRef<Order> actorReplyTo;
+        public final ActorRef<StatusReply<OrderSummary>> replyTo;
 
-        public GetOrder(String orderUuid, ActorRef<Order> actorReplyTo) {
-            this.orderUuid = orderUuid;
-            this.actorReplyTo = actorReplyTo;
+        public GetOrder(ActorRef<StatusReply<OrderSummary>> replyTo) {
+            this.replyTo = replyTo;
         }
     }
 
     public static class PayOrder implements Command {
-        public final String orderUuid;
-        final ActorRef<OrderPaid> replyTo;
+        final ActorRef<StatusReply<OrderSummary>> replyTo;
 
-        public PayOrder(String orderUuid, ActorRef<OrderPaid> replyTo) {
-            this.orderUuid = orderUuid;
+        public PayOrder(ActorRef<StatusReply<OrderSummary>> replyTo) {
             this.replyTo = replyTo;
         }
     }
 
     public static class CloseOrder implements Command {
-        public final String orderUuid;
         public final boolean isShippedSuccessfully;
 
-        public CloseOrder(String orderUuid, boolean isShippedSuccessfully) {
-            this.orderUuid = orderUuid;
+        public CloseOrder(boolean isShippedSuccessfully) {
             this.isShippedSuccessfully = isShippedSuccessfully;
         }
     }
 
     public static class OrderInFulfilment implements Command {
-        public final String orderUuid;
-
-        public OrderInFulfilment(String orderUuid) {
-            this.orderUuid = orderUuid;
+        public OrderInFulfilment() {
         }
     }
 
-    @Value
-    public static class OrdersResponse {
-        public final List<Order> orders;
+    @ToString
+    public static class OrderSummary implements JsonSerializable {
+        public final String id;
+        public final String item;
+        public final OrderStatus state;
+        public final Boolean isShippedSuccessfully;
 
         @JsonCreator
-        public OrdersResponse(@JsonProperty("orders") List<Order> orders) {
-            this.orders = orders;
-        }
-    }
-
-    @Value
-    public static class OrderCreated implements Event {
-        public final Order data;
-
-        @JsonCreator
-        public OrderCreated(@JsonProperty("data") Order data) {
-            this.data = data;
-        }
-    }
-
-    @Value
-    public static class OrderPaid implements Event {
-        public final String orderUuid;
-
-        @JsonCreator
-        public OrderPaid(@JsonProperty("orderUuid") String orderUuid) {
-            this.orderUuid = orderUuid;
-        }
-    }
-
-    public static class OrderWasInFulfilment implements Event {
-        public final String orderUuid;
-
-        @JsonCreator
-        public OrderWasInFulfilment(@JsonProperty("orderUuid") String orderUuid) {
-            this.orderUuid = orderUuid;
-        }
-    }
-
-    public static class OrderClosed implements Event {
-        public final String orderUuid;
-        public final boolean isShippedSuccessfully;
-
-        @JsonCreator
-        public OrderClosed(@JsonProperty("orderUuid") String orderUuid, @JsonProperty("isShippedSuccessfully") boolean isShippedSuccessfully) {
-            this.orderUuid = orderUuid;
+        public OrderSummary(@JsonProperty("id") String id, @JsonProperty("item") String item, @JsonProperty("state") OrderStatus state, @JsonProperty("isShippedSuccessfully") Boolean isShippedSuccessfully) {
+            this.id = id;
+            this.item = item;
+            this.state = state;
             this.isShippedSuccessfully = isShippedSuccessfully;
         }
     }
 
-    public static Behavior<Command> create() {
-        return Behaviors.setup(ctx -> new OrderEntity(PersistenceId.ofUniqueId("orders"), ctx));
+    public static class OrderCreated extends Event {
+        public final String item;
+
+        @JsonCreator
+        public OrderCreated(String orderId, @JsonProperty("item") String item) {
+            super(orderId);
+            this.item = item;
+        }
     }
 
-    private OrderEntity(PersistenceId persistenceId, ActorContext<Command> ctx) {
-        super(persistenceId);
+    public static class OrderPaid extends Event {
+
+        @JsonCreator
+        public OrderPaid(String orderId) {
+            super(orderId);
+        }
+    }
+
+    public static class OrderWasInFulfilment extends Event {
+        @JsonCreator
+        public OrderWasInFulfilment(String orderId) {
+            super(orderId);
+        }
+    }
+
+    public static class OrderClosed extends Event {
+        public final boolean isShippedSuccessfully;
+
+        @JsonCreator
+        public OrderClosed(String orderId, @JsonProperty("isShippedSuccessfully") boolean isShippedSuccessfully) {
+            super(orderId);
+            this.isShippedSuccessfully = isShippedSuccessfully;
+        }
+    }
+
+    private final String orderId;
+
+    public static Behavior<Command> create(String orderId) {
+        return Behaviors.setup(ctx -> EventSourcedBehavior.start(new OrderEntity(orderId, ctx), ctx));
+    }
+
+    public static void init(ActorSystem<?> system) {
+        ClusterSharding.get(system)
+                .init(
+                        Entity.of(
+                                ENTITY_KEY,
+                                entityContext -> OrderEntity.create(entityContext.getEntityId())));
+    }
+
+    private OrderEntity(String orderId, ActorContext<Command> ctx) {
+        super(PersistenceId.of(ENTITY_KEY.name(), orderId));
+        this.orderId = orderId;
         this.context = ctx;
     }
 
@@ -205,65 +188,92 @@ public class OrderEntity extends EventSourcedBehavior<OrderEntity.Command, Order
     }
 
     @Override
-    public CommandHandler<Command, Event, State> commandHandler() {
-        return newCommandHandlerBuilder()
-                .forAnyState()
-                .onCommand(CreateOrder.class, this::onCreateOrder)
-                .onCommand(PayOrder.class, this::onPayOrder)
-                .onCommand(CloseOrder.class, this::onCloseOrder)
-                .onCommand(GetOrders.class, this::onGetOrders)
-                .onCommand(GetOrder.class, this::onGetOrder)
-                .onCommand(OrderInFulfilment.class, this::onOrderInFulfilment)
-                .build();
+    public CommandHandlerWithReply<Command, Event, State> commandHandler() {
+        CommandHandlerWithReplyBuilder<Command, Event, State> eventsBuilders = newCommandHandlerWithReplyBuilder();
+
+        eventsBuilders.forState(state -> state.status != null)
+                .onCommand(GetOrder.class, this::onGetOrder);
+
+        eventsBuilders.forState(state -> state.status == null)
+                .onCommand(CreateOrder.class, this::onCreateOrder);
+
+        eventsBuilders.forState(state -> state.status == OrderStatus.CREATED)
+                .onCommand(PayOrder.class, this::onPayOrder);
+
+        eventsBuilders.forState(state -> state.status == OrderStatus.PAID)
+                .onCommand(OrderInFulfilment.class, this::onOrderInFulfilment);
+
+        eventsBuilders.forState(state -> state.status == OrderStatus.IN_FULFILLMENT)
+                .onCommand(CloseOrder.class, this::onCloseOrder);
+
+        eventsBuilders.forAnyState()
+                .onCommand(CreateOrder.class, this::createNotAllowed)
+                .onCommand(PayOrder.class, this::payNotAllowed)
+                .onCommand(GetOrder.class, this::orderNotFound);
+
+        return eventsBuilders.build();
     }
 
     @Override
     public EventHandler<State, Event> eventHandler() {
         return newEventHandlerBuilder()
                 .forAnyState()
-                .onEvent(OrderCreated.class, (state, event) -> state.addOrder(event.data))
-                .onEvent(OrderClosed.class, (state, event) -> state.markOrderAsClosed(event.orderUuid, event.isShippedSuccessfully))
-                .onEvent(OrderPaid.class, (state, event) -> state.markOrderAsPaid(event.orderUuid))
-                .onEvent(OrderWasInFulfilment.class, (state, event) -> state.markOrderAsInFulfilment(event.orderUuid))
+                .onEvent(OrderCreated.class, (state, event) -> new State(event.item, OrderStatus.CREATED, null))
+                .onEvent(OrderClosed.class, (state, event) -> state.markOrderAsClosed(event.isShippedSuccessfully))
+                .onEvent(OrderPaid.class, (state, event) -> state.markOrderAsPaid())
+                .onEvent(OrderWasInFulfilment.class, (state, event) -> state.markOrderAsInFulfilment())
                 .build();
     }
 
-    private Effect<Event, State> onCreateOrder(CreateOrder command) {
+    private ReplyEffect<Event, State> createNotAllowed(CreateOrder command) {
+        context.getLog().info("Create order not allowed");
+        return Effect().reply(command.replyTo, StatusReply.error("Cannot create an order" + orderId + " that is already created"));
+    }
+
+    private ReplyEffect<Event, State> orderNotFound(GetOrder command) {
+        context.getLog().info("Order not found");
+        return Effect().reply(command.replyTo, StatusReply.error("Cannot find an order with id " + orderId));
+    }
+
+    private ReplyEffect<Event, State> payNotAllowed(State state, PayOrder command) {
+        context.getLog().info("Pay order not allowed");
+        return Effect().reply(command.replyTo, StatusReply.error("Cannot pay an order that is in state " + state.status));
+    }
+
+    private ReplyEffect<Event, State> onCreateOrder(CreateOrder command) {
         context.getLog().info("Creating order");
         return Effect()
-                .persist(new OrderCreated(command.data))
-                .thenRun(() -> command.actorReplyTo.tell(new OrderCreated(command.data)));
+                .persist(new OrderCreated(orderId, command.item))
+                .thenReply(command.replyTo, newState -> StatusReply.success(newState.toSummary(orderId)));
     }
 
-    private Effect<Event, State> onPayOrder(PayOrder command) {
+    private ReplyEffect<Event, State> onPayOrder(PayOrder command) {
         context.getLog().info("Paying order");
-        ActorRef<FulfilmentProvider.Command> fulfilmentProvider = context.spawn(FulfilmentProvider.create(), "fulfilment-provider-" + command.orderUuid);
+        ActorRef<FulfilmentProvider.Command> fulfilmentProvider = context.spawn(FulfilmentProvider.create(orderId), "fulfilment-provider-" + orderId);
 
         return Effect()
-                .persist(new OrderPaid(command.orderUuid))
-                .thenRun(() -> command.replyTo.tell(new OrderPaid(command.orderUuid)))
-                .thenRun(() -> fulfilmentProvider.tell(new FulfilmentProvider.ShipOrder(command.orderUuid, context.getSelf())));
+                .persist(new OrderPaid(orderId))
+                .thenRun(newState -> fulfilmentProvider.tell(new FulfilmentProvider.ShipOrder(newState.toSummary(orderId), context.getSelf())))
+                .thenReply(command.replyTo, newState -> StatusReply.success(newState.toSummary(orderId)));
     }
 
-    private Effect<Event, State> onCloseOrder(CloseOrder command) {
+    private ReplyEffect<Event, State> onCloseOrder(CloseOrder command) {
         context.getLog().info("Closing order");
         return Effect()
-                .persist(new OrderClosed(command.orderUuid, command.isShippedSuccessfully));
+                .persist(new OrderClosed(orderId, command.isShippedSuccessfully))
+                .thenNoReply();
     }
 
-    private Effect<Event, State> onGetOrders(State state, GetOrders command) {
-        context.getLog().info("Getting all orders");
-        return Effect().reply(command.actorReplyTo, new OrdersResponse(Collections.unmodifiableList(state.orders)));
+    private ReplyEffect<Event, State> onGetOrder(State state, GetOrder command) {
+        context.getLog().info("Get order by id {}", orderId);
+        return Effect().reply(command.replyTo, StatusReply.success(state.toSummary(orderId)));
+
     }
 
-    private Effect<Event, State> onGetOrder(State state, GetOrder command) {
-        context.getLog().info("Get order by uuid {}", command.orderUuid);
-        return Effect().reply(command.actorReplyTo, state.getOrder(command.orderUuid));
-    }
-
-    private Effect<Event, State> onOrderInFulfilment(State state, OrderInFulfilment command) {
-        context.getLog().info("Order in fulfilment {}", command.orderUuid);
+    private ReplyEffect<Event, State> onOrderInFulfilment(OrderInFulfilment command) {
+        context.getLog().info("Order in fulfilment {}", orderId);
         return Effect()
-                .persist(new OrderWasInFulfilment(command.orderUuid));
+                .persist(new OrderWasInFulfilment(orderId))
+                .thenNoReply();
     }
 }

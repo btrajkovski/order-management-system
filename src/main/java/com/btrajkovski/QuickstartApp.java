@@ -9,7 +9,7 @@ import akka.http.javadsl.ServerBinding;
 import akka.http.javadsl.server.Route;
 import akka.management.cluster.bootstrap.ClusterBootstrap;
 import akka.management.javadsl.AkkaManagement;
-import com.btrajkovski.orders.OrderEntity2;
+import com.btrajkovski.orders.OrderEntity;
 import com.btrajkovski.router.OrderRoutes;
 
 import java.net.InetSocketAddress;
@@ -44,7 +44,7 @@ public class QuickstartApp {
 
             AkkaManagement.get(context.getSystem()).start();
             ClusterBootstrap.get(context.getSystem()).start();
-            OrderEntity2.init(context.getSystem());
+            OrderEntity.init(context.getSystem());
 
             OrderRoutes orderRoutes = new OrderRoutes(context.getSystem());
             startHttpServer(orderRoutes.userRoutes(), context.getSystem());

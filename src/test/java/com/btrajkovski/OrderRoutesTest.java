@@ -17,7 +17,7 @@ import akka.pattern.StatusReply;
 import akka.persistence.testkit.PersistenceTestKitPlugin;
 import akka.persistence.testkit.javadsl.PersistenceTestKit;
 import akka.persistence.typed.PersistenceId;
-import com.btrajkovski.orders.OrderEntity2;
+import com.btrajkovski.orders.OrderEntity;
 import com.btrajkovski.router.OrderRoutes;
 import com.typesafe.config.ConfigFactory;
 import org.junit.After;
@@ -64,13 +64,13 @@ public class OrderRoutesTest extends JUnitRouteTest {
         ClusterSharding.get(testKit.system())
                 .init(
                         Entity.of(
-                                OrderEntity2.ENTITY_KEY,
-                                entityContext -> OrderEntity2.create(entityContext.getEntityId())));
+                                OrderEntity.ENTITY_KEY,
+                                entityContext -> OrderEntity.create(entityContext.getEntityId())));
     }
 
     @Test
     public void createNewValidOrder() {
-        OrderEntity2.OrderSummary orderSummary = appRoute.run(HttpRequest.POST("/orders")
+        OrderEntity.OrderSummary orderSummary = appRoute.run(HttpRequest.POST("/orders")
                 .withEntity(MediaTypes.APPLICATION_JSON.toContentType(),
                         "{\n" +
                                 "    \"userId\": 1,\n" +
@@ -78,25 +78,36 @@ public class OrderRoutesTest extends JUnitRouteTest {
                                 "}"))
                 .assertStatusCode(StatusCodes.CREATED)
                 .assertMediaType("application/json")
-                .entity(Jackson.unmarshaller(OrderEntity2.OrderSummary.class));
+                .entity(Jackson.unmarshaller(OrderEntity.OrderSummary.class));
 
         assertThat(orderSummary).isNotNull();
         assertThat(orderSummary.isShippedSuccessfully).isNull();
         assertThat(orderSummary.id).isNotNull();
-        assertThat(orderSummary.state).isEqualTo(OrderEntity2.State.OrderStatus.CREATED);
+        assertThat(orderSummary.state).isEqualTo(OrderEntity.OrderStatus.CREATED);
         assertThat(orderSummary.item).isEqualTo("Asus GTX 2060");
 
-        persistenceTestKit.expectNextPersistedClass(PersistenceId.of(OrderEntity2.ENTITY_KEY.name(), orderSummary.id).id(), OrderEntity2.OrderCreated.class);
+        persistenceTestKit.expectNextPersistedClass(PersistenceId.of(OrderEntity.ENTITY_KEY.name(), orderSummary.id).id(), OrderEntity.OrderCreated.class);
+    }
+
+    @Test
+    public void throwBadRequestOnInvalidOrder() {
+        appRoute.run(HttpRequest.POST("/orders")
+                .withEntity(MediaTypes.APPLICATION_JSON.toContentType(),
+                        "{\n" +
+                                "    \"userId\": 1,\n" +
+                                "    \"item\": \"\"\n" +
+                                "}"))
+                .assertStatusCode(StatusCodes.BAD_REQUEST);
     }
 
     @Test
     public void paymentOfOrder() {
         String itemName = "Logitech MX518";
 
-        TestProbe<StatusReply<OrderEntity2.OrderSummary>> createOrderProbe = testKit.createTestProbe();
-        EntityRef<OrderEntity2.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity2.ENTITY_KEY, UUID.randomUUID().toString());
-        entityRef.tell(new OrderEntity2.CreateOrder(itemName, createOrderProbe.getRef()));
-        OrderEntity2.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
+        TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
+        EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
+        entityRef.tell(new OrderEntity.CreateOrder(itemName, createOrderProbe.getRef()));
+        OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
 
         String orderId = orderCreated.id;
         appRoute.run(HttpRequest.GET(String.format("/orders/%s/confirm", orderId)))
@@ -109,43 +120,60 @@ public class OrderRoutesTest extends JUnitRouteTest {
             e.printStackTrace();
         }
 
-        TestProbe<StatusReply<OrderEntity2.OrderSummary>> getOrderProbe = testKit.createTestProbe();
-        entityRef.tell(new OrderEntity2.GetOrder(getOrderProbe.getRef()));
-        StatusReply<OrderEntity2.OrderSummary> orderSummaryStatusReply = getOrderProbe.receiveMessage(Duration.ofMillis(100));
+        TestProbe<StatusReply<OrderEntity.OrderSummary>> getOrderProbe = testKit.createTestProbe();
+        entityRef.tell(new OrderEntity.GetOrder(getOrderProbe.getRef()));
+        StatusReply<OrderEntity.OrderSummary> orderSummaryStatusReply = getOrderProbe.receiveMessage(Duration.ofMillis(100));
 
         assertThat(orderSummaryStatusReply.isSuccess()).isTrue();
 
-        OrderEntity2.OrderSummary orderSummary = orderSummaryStatusReply.getValue();
+        OrderEntity.OrderSummary orderSummary = orderSummaryStatusReply.getValue();
         assertThat(orderSummary).isNotNull();
         assertThat(orderSummary.isShippedSuccessfully).isNotNull();
         assertThat(orderSummary.id).isNotNull();
-        assertThat(orderSummary.state).isEqualTo(OrderEntity2.State.OrderStatus.CLOSED);
+        assertThat(orderSummary.state).isEqualTo(OrderEntity.OrderStatus.CLOSED);
         assertThat(orderSummary.item).isEqualTo(itemName);
 
-        String persistenceId = PersistenceId.of(OrderEntity2.ENTITY_KEY.name(), orderSummary.id).id();
-        persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity2.OrderCreated.class);
-        persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity2.OrderPaid.class);
-        persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity2.OrderWasInFulfilment.class);
-        persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity2.OrderClosed.class, Duration.ofMillis(100));
+        String persistenceId = PersistenceId.of(OrderEntity.ENTITY_KEY.name(), orderSummary.id).id();
+        persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity.OrderCreated.class);
+        persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity.OrderPaid.class);
+        persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity.OrderWasInFulfilment.class);
+        persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity.OrderClosed.class, Duration.ofMillis(100));
     }
-
 
     @Test
     public void getOrderById() {
         String itemName = "Intel i3 9100f";
 
-        TestProbe<StatusReply<OrderEntity2.OrderSummary>> createOrderProbe = testKit.createTestProbe();
-        EntityRef<OrderEntity2.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity2.ENTITY_KEY, UUID.randomUUID().toString());
-        entityRef.tell(new OrderEntity2.CreateOrder(itemName, createOrderProbe.getRef()));
-        OrderEntity2.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
+        TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
+        EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
+        entityRef.tell(new OrderEntity.CreateOrder(itemName, createOrderProbe.getRef()));
+        OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
 
-        OrderEntity2.OrderSummary ordersResponse = appRoute.run(HttpRequest.GET("/orders/" + orderCreated.id))
+        OrderEntity.OrderSummary ordersResponse = appRoute.run(HttpRequest.GET("/orders/" + orderCreated.id))
                 .assertStatusCode(StatusCodes.OK)
                 .assertMediaType("application/json")
-                .entity(Jackson.unmarshaller(OrderEntity2.OrderSummary.class));
+                .entity(Jackson.unmarshaller(OrderEntity.OrderSummary.class));
 
         assertThat(ordersResponse.id).isEqualTo(orderCreated.id);
         assertThat(ordersResponse.item).isEqualTo(itemName);
-        assertThat(ordersResponse.state).isEqualTo(OrderEntity2.State.OrderStatus.CREATED);
+        assertThat(ordersResponse.state).isEqualTo(OrderEntity.OrderStatus.CREATED);
+    }
+
+    @Test
+    public void shouldThrowBadRequestIfPayingSameOrderTwice() {
+        String itemName = "Logitech MX518";
+
+        TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
+        EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
+        entityRef.tell(new OrderEntity.CreateOrder(itemName, createOrderProbe.getRef()));
+        OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
+
+        String orderId = orderCreated.id;
+        appRoute.run(HttpRequest.GET(String.format("/orders/%s/confirm", orderId)))
+                .assertStatusCode(StatusCodes.OK)
+                .assertMediaType("application/json");
+
+        appRoute.run(HttpRequest.GET(String.format("/orders/%s/confirm", orderId)))
+                .assertStatusCode(StatusCodes.BAD_REQUEST);
     }
 }

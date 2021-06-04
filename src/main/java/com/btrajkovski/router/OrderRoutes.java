@@ -8,7 +8,7 @@ import akka.http.javadsl.model.StatusCodes;
 import akka.http.javadsl.server.*;
 import akka.pattern.StatusReply;
 import com.btrajkovski.orders.CreateOrderRequest;
-import com.btrajkovski.orders.OrderEntity2;
+import com.btrajkovski.orders.OrderEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,24 +37,31 @@ public class OrderRoutes {
         sharding = ClusterSharding.get(system);
     }
 
-    private CompletionStage<OrderEntity2.OrderSummary> getOrder(String id) {
-        EntityRef<OrderEntity2.Command> entityRef = sharding.entityRefFor(OrderEntity2.ENTITY_KEY, id);
-        return entityRef.askWithStatus(replyTo -> new OrderEntity2.GetOrder(replyTo), askTimeout);
+    private CompletionStage<OrderEntity.OrderSummary> getOrder(String id) {
+        EntityRef<OrderEntity.Command> entityRef = sharding.entityRefFor(OrderEntity.ENTITY_KEY, id);
+        return entityRef.askWithStatus(replyTo -> new OrderEntity.GetOrder(replyTo), askTimeout);
     }
 
-    private CompletionStage<OrderEntity2.OrderSummary> createOrder(CreateOrderRequest createOrderRequest) {
+    private CompletionStage<OrderEntity.OrderSummary> createOrder(CreateOrderRequest createOrderRequest) {
+        if (createOrderRequest.item.length() < 3) {
+            throw new OrdersValidationException("Item name must contain at least 3 characters");
+        }
+
         String orderId = UUID.randomUUID().toString();
-        EntityRef<OrderEntity2.Command> entityRef = sharding.entityRefFor(OrderEntity2.ENTITY_KEY, orderId);
-        return entityRef.askWithStatus(replyTo -> new OrderEntity2.CreateOrder(createOrderRequest.item, replyTo), askTimeout);
+        EntityRef<OrderEntity.Command> entityRef = sharding.entityRefFor(OrderEntity.ENTITY_KEY, orderId);
+        return entityRef.askWithStatus(replyTo -> new OrderEntity.CreateOrder(createOrderRequest.item, replyTo), askTimeout);
     }
 
-    private CompletionStage<OrderEntity2.OrderSummary> confirmOrder(String orderUuid) {
-        EntityRef<OrderEntity2.Command> entityRef = sharding.entityRefFor(OrderEntity2.ENTITY_KEY, orderUuid);
-        return entityRef.askWithStatus(replyTo -> new OrderEntity2.PayOrder(replyTo), askTimeout);
+    private CompletionStage<OrderEntity.OrderSummary> confirmOrder(String orderUuid) {
+        EntityRef<OrderEntity.Command> entityRef = sharding.entityRefFor(OrderEntity.ENTITY_KEY, orderUuid);
+        return entityRef.askWithStatus(replyTo -> new OrderEntity.PayOrder(replyTo), askTimeout);
     }
 
     final ExceptionHandler exceptionHandler = ExceptionHandler.newBuilder()
             .match(StatusReply.ErrorMessage.class, exp ->
+                    complete(StatusCodes.BAD_REQUEST, exp.getMessage())
+            )
+            .match(OrdersValidationException.class, exp ->
                     complete(StatusCodes.BAD_REQUEST, exp.getMessage())
             )
             .match(Exception.class, exp ->
@@ -63,22 +70,21 @@ public class OrderRoutes {
             .build();
 
     final RejectionHandler rejectionHandler = RejectionHandler.newBuilder()
-            .handle(Rejection.class, rej ->
-                    complete(StatusCodes.INTERNAL_SERVER_ERROR, "Default rejection " + rej.toString())
-            )
-            .handle(AuthorizationFailedRejection.class, rej ->
-                    complete(StatusCodes.FORBIDDEN, "You're out of your depth!")
-            )
             .handle(ValidationRejection.class, rej ->
-                    complete(StatusCodes.INTERNAL_SERVER_ERROR, "That wasn't valid! " + rej.message())
+                    complete(StatusCodes.BAD_REQUEST, "Invalid request: " + rej.message())
+            )
+            .handle(MalformedRequestContentRejection.class, rej ->
+                    complete(StatusCodes.BAD_REQUEST, "Invalid request: " + rej.toString())
             )
             .handleAll(MethodRejection.class, rejections -> {
                 String supported = rejections.stream()
                         .map(rej -> rej.supported().name())
                         .collect(Collectors.joining(" or "));
-                return complete(StatusCodes.METHOD_NOT_ALLOWED, "Can't do that! Supported: " + supported + "!");
+                return complete(StatusCodes.METHOD_NOT_ALLOWED, "Only following methods are supported on this endpoint:" + supported);
             })
-//            .handleNotFound(complete(StatusCodes.NOT_FOUND, "Not here!"))
+            .handle(Rejection.class, rej ->
+                    complete(StatusCodes.BAD_REQUEST,  rej.toString())
+            )
             .build();
 
     /**
@@ -86,11 +92,11 @@ public class OrderRoutes {
      */
     //#all-routes
     public Route userRoutes() {
-        return handleRejections(rejectionHandler,
-                () -> pathPrefix("orders", () ->
+        return
+                pathPrefix("orders", () ->
                         concat(
-                                //#users-get-delete
                                 pathEnd(() ->
+                                        //#create-new-order endpoint
                                         post(() ->
                                                 entity(
                                                         Jackson.unmarshaller(CreateOrderRequest.class),
@@ -102,11 +108,9 @@ public class OrderRoutes {
                                                 )
                                         )
                                 ),
-                                //#users-get-delete
-                                //#users-get-post
+                                //get-order-by-id endpoint
                                 path(PathMatchers.segment(), (String orderUuid) ->
                                         get(() ->
-                                                        //#retrieve-user-info
                                                         rejectEmptyResponse(() ->
                                                                 onSuccess(getOrder(orderUuid), performed -> {
                                                                             log.info("Get order by uuid {}", orderUuid);
@@ -114,23 +118,20 @@ public class OrderRoutes {
                                                                         }
                                                                 )
                                                         )
-                                                //#retrieve-user-info
                                         )
                                 ),
-                                //#users-get-post
+                                //#pay-order endpoint
                                 path(PathMatchers.segment().slash("confirm"), (String orderUuid) ->
                                         get(() ->
-                                                        //#retrieve-user-info
                                                         rejectEmptyResponse(() ->
                                                                 onSuccess(confirmOrder(orderUuid), performed ->
                                                                         complete(StatusCodes.OK, performed, Jackson.marshaller())
                                                                 )
                                                         )
-                                                //#retrieve-user-info
                                         )
                                 )
                         )
-                ));
+                ).seal(rejectionHandler, exceptionHandler);
     }
     //#all-routes
 
