@@ -93,6 +93,7 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
                 .build();
     }
 
+    // maybe use whole order instead of uuid
     private Effect<Event, State> shipOrder(FulfilmentProvider.ShipOrder command) {
         boolean shipSuccessfully = new Random().nextBoolean();
 

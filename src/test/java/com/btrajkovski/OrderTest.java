@@ -3,32 +3,37 @@ package com.btrajkovski;
 import akka.actor.testkit.typed.javadsl.TestKitJunitResource;
 import akka.actor.testkit.typed.javadsl.TestProbe;
 import akka.actor.typed.ActorRef;
+import akka.http.javadsl.testkit.JUnitRouteTest;
+import com.btrajkovski.orders.Order;
 import com.btrajkovski.orders.OrderEntity;
+import com.typesafe.config.ConfigFactory;
+import org.assertj.core.api.Assertions;
 import org.junit.Assert;
 import org.junit.ClassRule;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class OrderTest {
+public class OrderTest  {
     @ClassRule
-    public static final TestKitJunitResource testKit = new TestKitJunitResource();
-
-    private static AtomicInteger counter = new AtomicInteger();
-    private static String newCartId() {
-        return "cart-" + counter.incrementAndGet();
-    }
+    public static final TestKitJunitResource testKit = new TestKitJunitResource(ConfigFactory.load(OrderRoutesTest.class.getClassLoader(), "application-test.conf"));
 
     @Test
     public void shouldAddItem() {
-        ActorRef<OrderEntity.Command> orders = testKit.spawn(OrderEntity.create());
+        ActorRef<OrderEntity.Command> ordersEntity = testKit.spawn(OrderEntity.create(), "something");
         TestProbe<OrderEntity.OrderCreated> probe = testKit.createTestProbe();
-//        orders.tell(new Orders.CreateOrder("something", null));
+        ordersEntity.tell(new OrderEntity.CreateOrder(new Order("some GPU", 1), probe.getRef()));
+        OrderEntity.OrderCreated orderCreated = probe.receiveMessage(Duration.ofSeconds(3L));
+        Assertions.assertThat(orderCreated.data.items.get(0)).isEqualTo("some GPU");
+    }
+
+    @Test
+    public void shouldNotAllowPaymentBeforeAddingItem() {
+        ActorRef<OrderEntity.Command> ordersEntity = testKit.spawn(OrderEntity.create());
+        TestProbe<OrderEntity.OrderCreated> probe = testKit.createTestProbe();
+        ordersEntity.tell(new OrderEntity.CreateOrder(new Order("some GPU", 1), probe.getRef()));
         OrderEntity.OrderCreated orderCreated = probe.receiveMessage();
-        Assert.assertEquals("something", orderCreated.data);
-//        cart.tell(new ShoppingCart.AddItem("foo", 42, probe.getRef()));
-//        StatusReply<ShoppingCart.Summary> result = probe.receiveMessage();
-//        assertEquals(42, result.getValue().items.get("foo").intValue());
-//        assertFalse(result.getValue().checkedOut);
+        Assertions.assertThat(orderCreated.data.items.get(0)).isEqualTo("some GPU");
     }
 }

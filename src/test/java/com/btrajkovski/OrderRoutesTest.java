@@ -25,18 +25,7 @@ import java.time.Duration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 
-//#set-up
-//@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class OrderRoutesTest extends JUnitRouteTest {
-
-    static Config conf =
-            PersistenceTestKitPlugin.getInstance()
-                    .config()
-                    .withFallback(ConfigFactory.load(OrderRoutesTest.class.getClassLoader(), "application-test.conf"));
-
-    //#test-top
-    private static ActorRef<OrderEntity.Command> ordersEntity;
-    private TestRoute appRoute;
 
     @ClassRule
     public static final TestKitJunitResource testKit =
@@ -45,7 +34,9 @@ public class OrderRoutesTest extends JUnitRouteTest {
                             .config()
                             .withFallback(ConfigFactory.load(OrderRoutesTest.class.getClassLoader(), "application-test.conf")));
 
-    PersistenceTestKit persistenceTestKit = PersistenceTestKit.create(testKit.system());
+    private static ActorRef<OrderEntity.Command> ordersEntity;
+    private TestRoute appRoute;
+    private final PersistenceTestKit persistenceTestKit = PersistenceTestKit.create(testKit.system());
 
     @Before
     public void beforeEach() {

@@ -5,10 +5,7 @@ import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import akka.persistence.typed.PersistenceId;
-import akka.persistence.typed.javadsl.CommandHandler;
-import akka.persistence.typed.javadsl.Effect;
-import akka.persistence.typed.javadsl.EventHandler;
-import akka.persistence.typed.javadsl.EventSourcedBehavior;
+import akka.persistence.typed.javadsl.*;
 import com.btrajkovski.serializers.JsonSerializable;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -47,8 +44,7 @@ public class OrderEntity extends EventSourcedBehavior<OrderEntity.Command, Order
         }
 
         public Order getOrder(String orderUuid) {
-            List<Order> newOrders = new ArrayList<>(orders);
-            return newOrders.stream()
+            return orders.stream()
                     .filter(order -> order.orderUuid.equals(orderUuid))
                     .findFirst()
                     .orElse(null);
@@ -59,6 +55,7 @@ public class OrderEntity extends EventSourcedBehavior<OrderEntity.Command, Order
             newOrders.stream()
                     .filter(order -> order.orderUuid.equals(orderUuid))
                     .findFirst()
+                    // TODO check previous state
                     .ifPresent(Order::markAsPaid);
 
             return new State(newOrders);
