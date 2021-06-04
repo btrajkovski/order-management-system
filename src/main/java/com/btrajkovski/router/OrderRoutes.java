@@ -43,13 +43,16 @@ public class OrderRoutes {
     }
 
     private CompletionStage<OrderEntity.OrderSummary> createOrder(CreateOrderRequest createOrderRequest) {
-        if (createOrderRequest.item.length() < 3) {
-            throw new OrdersValidationException("Item name must contain at least 3 characters");
+        if (createOrderRequest.items.isEmpty()) {
+            throw new OrdersValidationException("Order must contain at least 1 item");
+        }
+        if (createOrderRequest.items.stream().anyMatch(item -> item.length() < 3)) {
+            throw new OrdersValidationException("Each item names must contain at least 3 characters");
         }
 
         String orderId = UUID.randomUUID().toString();
         EntityRef<OrderEntity.Command> entityRef = sharding.entityRefFor(OrderEntity.ENTITY_KEY, orderId);
-        return entityRef.askWithStatus(replyTo -> new OrderEntity.CreateOrder(createOrderRequest.item, replyTo), askTimeout);
+        return entityRef.askWithStatus(replyTo -> new OrderEntity.CreateOrder(createOrderRequest.items, replyTo), askTimeout);
     }
 
     private CompletionStage<OrderEntity.OrderSummary> confirmOrder(String orderUuid) {

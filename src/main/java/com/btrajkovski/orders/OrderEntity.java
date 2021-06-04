@@ -16,6 +16,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.ToString;
 
+import java.util.List;
+
 public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEntity.Command, OrderEntity.Event, OrderEntity.State> {
 
     // this makes the context available to the command handler etc.
@@ -34,7 +36,7 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
     }
 
     public static class State {
-        public final String item;
+        public final List<String> items;
         public final OrderStatus status;
         public final Boolean isShippedSuccessfully;
 
@@ -42,26 +44,26 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
             this(null, null, null);
         }
 
-        public State(String item, OrderStatus status, Boolean isShippedSuccessfully) {
-            this.item = item;
+        public State(List<String> items, OrderStatus status, Boolean isShippedSuccessfully) {
+            this.items = items;
             this.status = status;
             this.isShippedSuccessfully = isShippedSuccessfully;
         }
 
         public State markOrderAsPaid() {
-            return new State(item, OrderStatus.PAID, isShippedSuccessfully);
+            return new State(items, OrderStatus.PAID, isShippedSuccessfully);
         }
 
         public State markOrderAsInFulfilment() {
-            return new State(item, OrderStatus.IN_FULFILLMENT, isShippedSuccessfully);
+            return new State(items, OrderStatus.IN_FULFILLMENT, isShippedSuccessfully);
         }
 
         public State markOrderAsClosed(boolean isShippedSuccessfully) {
-            return new State(item, OrderStatus.CLOSED, isShippedSuccessfully);
+            return new State(items, OrderStatus.CLOSED, isShippedSuccessfully);
         }
 
         public OrderSummary toSummary(String orderId) {
-            return new OrderSummary(orderId, item, status, isShippedSuccessfully);
+            return new OrderSummary(orderId, items, status, isShippedSuccessfully);
         }
     }
 
@@ -73,11 +75,11 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
             EntityTypeKey.create(Command.class, "OrderEntity");
 
     public static class CreateOrder implements Command {
-        public final String item;
+        public final List<String> items;
         public final ActorRef<StatusReply<OrderSummary>> replyTo;
 
-        public CreateOrder(String item, ActorRef<StatusReply<OrderSummary>> replyTo) {
-            this.item = item;
+        public CreateOrder(List<String> items, ActorRef<StatusReply<OrderSummary>> replyTo) {
+            this.items = items;
             this.replyTo = replyTo;
         }
     }
@@ -114,26 +116,26 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
     @ToString
     public static class OrderSummary implements JsonSerializable {
         public final String id;
-        public final String item;
+        public final List<String> items;
         public final OrderStatus state;
         public final Boolean isShippedSuccessfully;
 
         @JsonCreator
-        public OrderSummary(@JsonProperty("id") String id, @JsonProperty("item") String item, @JsonProperty("state") OrderStatus state, @JsonProperty("isShippedSuccessfully") Boolean isShippedSuccessfully) {
+        public OrderSummary(@JsonProperty("id") String id, @JsonProperty("item") List<String> items, @JsonProperty("state") OrderStatus state, @JsonProperty("isShippedSuccessfully") Boolean isShippedSuccessfully) {
             this.id = id;
-            this.item = item;
+            this.items = items;
             this.state = state;
             this.isShippedSuccessfully = isShippedSuccessfully;
         }
     }
 
     public static class OrderCreated extends Event {
-        public final String item;
+        public final List<String> items;
 
         @JsonCreator
-        public OrderCreated(String orderId, @JsonProperty("item") String item) {
+        public OrderCreated(String orderId, @JsonProperty("items") List<String> items) {
             super(orderId);
-            this.item = item;
+            this.items = items;
         }
     }
 
@@ -206,6 +208,7 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
         eventsBuilders.forState(state -> state.status == OrderStatus.IN_FULFILLMENT)
                 .onCommand(CloseOrder.class, this::onCloseOrder);
 
+        // Negative scenarios
         eventsBuilders.forAnyState()
                 .onCommand(CreateOrder.class, this::createNotAllowed)
                 .onCommand(PayOrder.class, this::payNotAllowed)
@@ -218,7 +221,7 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
     public EventHandler<State, Event> eventHandler() {
         return newEventHandlerBuilder()
                 .forAnyState()
-                .onEvent(OrderCreated.class, (state, event) -> new State(event.item, OrderStatus.CREATED, null))
+                .onEvent(OrderCreated.class, (state, event) -> new State(event.items, OrderStatus.CREATED, null))
                 .onEvent(OrderClosed.class, (state, event) -> state.markOrderAsClosed(event.isShippedSuccessfully))
                 .onEvent(OrderPaid.class, (state, event) -> state.markOrderAsPaid())
                 .onEvent(OrderWasInFulfilment.class, (state, event) -> state.markOrderAsInFulfilment())
@@ -243,7 +246,7 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
     private ReplyEffect<Event, State> onCreateOrder(CreateOrder command) {
         context.getLog().info("Creating order");
         return Effect()
-                .persist(new OrderCreated(orderId, command.item))
+                .persist(new OrderCreated(orderId, command.items))
                 .thenReply(command.replyTo, newState -> StatusReply.success(newState.toSummary(orderId)));
     }
 

@@ -96,7 +96,7 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
     private Effect<Event, State> shipOrder(FulfilmentProvider.ShipOrder command) {
         boolean shipSuccessfully = new Random().nextBoolean();
 
-        context.getLog().info("Shipping order {} with status {}", command.orderSummary.item, shipSuccessfully);
+        context.getLog().info("Shipping orders [{}] with status {}", command.orderSummary.items, shipSuccessfully);
         command.actorReplyTo.tell(new OrderEntity.OrderInFulfilment());
 
         context.getLog().info("Waiting {} seconds before shipping the item", shippingDelay.getSeconds());

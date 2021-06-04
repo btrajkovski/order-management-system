@@ -8,6 +8,8 @@ import com.typesafe.config.ConfigFactory;
 import org.junit.ClassRule;
 import org.junit.Test;
 
+import java.util.Collections;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class OrderTest {
@@ -32,7 +34,7 @@ public class OrderTest {
     @Test
     public void shouldCreateOrder() {
         EventSourcedBehaviorTestKit.CommandResultWithReply<OrderEntity.Command, OrderEntity.Event, OrderEntity.State, StatusReply<OrderEntity.OrderSummary>>
-                result = eventSourcedTestKit.runCommand(replyTo -> new OrderEntity.CreateOrder("some GPU", replyTo));
+                result = eventSourcedTestKit.runCommand(replyTo -> new OrderEntity.CreateOrder(Collections.singletonList("some GPU"), replyTo));
 
         assertThat(result.reply().isSuccess()).isTrue();
 

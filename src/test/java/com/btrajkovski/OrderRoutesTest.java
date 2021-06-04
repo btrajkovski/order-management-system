@@ -26,6 +26,7 @@ import org.junit.ClassRule;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,7 +75,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
                 .withEntity(MediaTypes.APPLICATION_JSON.toContentType(),
                         "{\n" +
                                 "    \"userId\": 1,\n" +
-                                "    \"item\": \"Asus GTX 2060\"\n" +
+                                "    \"items\": [\"Asus GTX 2060\"]\n" +
                                 "}"))
                 .assertStatusCode(StatusCodes.CREATED)
                 .assertMediaType("application/json")
@@ -84,7 +85,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
         assertThat(orderSummary.isShippedSuccessfully).isNull();
         assertThat(orderSummary.id).isNotNull();
         assertThat(orderSummary.state).isEqualTo(OrderEntity.OrderStatus.CREATED);
-        assertThat(orderSummary.item).isEqualTo("Asus GTX 2060");
+        assertThat(orderSummary.items).containsExactly("Asus GTX 2060");
 
         persistenceTestKit.expectNextPersistedClass(PersistenceId.of(OrderEntity.ENTITY_KEY.name(), orderSummary.id).id(), OrderEntity.OrderCreated.class);
     }
@@ -106,7 +107,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
 
         TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
         EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
-        entityRef.tell(new OrderEntity.CreateOrder(itemName, createOrderProbe.getRef()));
+        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), createOrderProbe.getRef()));
         OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
 
         String orderId = orderCreated.id;
@@ -131,7 +132,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
         assertThat(orderSummary.isShippedSuccessfully).isNotNull();
         assertThat(orderSummary.id).isNotNull();
         assertThat(orderSummary.state).isEqualTo(OrderEntity.OrderStatus.CLOSED);
-        assertThat(orderSummary.item).isEqualTo(itemName);
+        assertThat(orderSummary.items).containsExactly(itemName);
 
         String persistenceId = PersistenceId.of(OrderEntity.ENTITY_KEY.name(), orderSummary.id).id();
         persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity.OrderCreated.class);
@@ -146,7 +147,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
 
         TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
         EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
-        entityRef.tell(new OrderEntity.CreateOrder(itemName, createOrderProbe.getRef()));
+        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), createOrderProbe.getRef()));
         OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
 
         OrderEntity.OrderSummary ordersResponse = appRoute.run(HttpRequest.GET("/orders/" + orderCreated.id))
@@ -155,7 +156,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
                 .entity(Jackson.unmarshaller(OrderEntity.OrderSummary.class));
 
         assertThat(ordersResponse.id).isEqualTo(orderCreated.id);
-        assertThat(ordersResponse.item).isEqualTo(itemName);
+        assertThat(ordersResponse.items).containsExactly(itemName);
         assertThat(ordersResponse.state).isEqualTo(OrderEntity.OrderStatus.CREATED);
     }
 
@@ -165,7 +166,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
 
         TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
         EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
-        entityRef.tell(new OrderEntity.CreateOrder(itemName, createOrderProbe.getRef()));
+        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), createOrderProbe.getRef()));
         OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
 
         String orderId = orderCreated.id;
