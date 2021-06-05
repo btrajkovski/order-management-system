@@ -33,11 +33,11 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
     }
 
     public static class ShipOrder implements Command {
-        private final String orderUuid;
+        private final OrderEntity.OrderSummary orderSummary;
         public final ActorRef<OrderEntity.Command> actorReplyTo;
 
-        public ShipOrder(String orderUuid, ActorRef<OrderEntity.Command> actorReplyTo) {
-            this.orderUuid = orderUuid;
+        public ShipOrder(OrderEntity.OrderSummary orderSummary, ActorRef<OrderEntity.Command> actorReplyTo) {
+            this.orderSummary = orderSummary;
             this.actorReplyTo = actorReplyTo;
         }
     }
@@ -60,8 +60,8 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
         }
     }
 
-    public static Behavior<Command> create() {
-        return Behaviors.setup(ctx -> new FulfilmentProvider(PersistenceId.ofUniqueId("fulfilment"), ctx));
+    public static Behavior<Command> create(String orderId) {
+        return Behaviors.setup(ctx -> new FulfilmentProvider(PersistenceId.ofUniqueId("fulfilment" + orderId), ctx));
     }
 
     private FulfilmentProvider(PersistenceId persistenceId, ActorContext<Command> ctx) {
@@ -93,12 +93,11 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
                 .build();
     }
 
-    // maybe use whole order instead of uuid
     private Effect<Event, State> shipOrder(FulfilmentProvider.ShipOrder command) {
         boolean shipSuccessfully = new Random().nextBoolean();
 
-        context.getLog().info("Shipping order with status {}", shipSuccessfully);
-        command.actorReplyTo.tell(new OrderEntity.OrderInFulfilment(command.orderUuid));
+        context.getLog().info("Shipping orders [{}] with status {}", command.orderSummary.items, shipSuccessfully);
+        command.actorReplyTo.tell(new OrderEntity.OrderInFulfilment());
 
         context.getLog().info("Waiting {} seconds before shipping the item", shippingDelay.getSeconds());
 
@@ -110,12 +109,12 @@ public class FulfilmentProvider extends EventSourcedBehavior<FulfilmentProvider.
         if (shipSuccessfully) {
             return Effect()
                     .persist(new OrderShipped(true))
-                    .thenRun(() -> command.actorReplyTo.tell(new OrderEntity.CloseOrder(command.orderUuid, true)))
+                    .thenRun(() -> command.actorReplyTo.tell(new OrderEntity.CloseOrder(true)))
                     .thenStop();
         } else {
             return Effect()
                     .persist(new ShipmentFailed(false))
-                    .thenRun(() -> command.actorReplyTo.tell(new OrderEntity.CloseOrder(command.orderUuid, false)))
+                    .thenRun(() -> command.actorReplyTo.tell(new OrderEntity.CloseOrder(false)))
                     .thenStop();
         }
     }
