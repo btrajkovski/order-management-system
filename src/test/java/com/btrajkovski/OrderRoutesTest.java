@@ -20,10 +20,7 @@ import akka.persistence.typed.PersistenceId;
 import com.btrajkovski.orders.OrderEntity;
 import com.btrajkovski.router.OrderRoutes;
 import com.typesafe.config.ConfigFactory;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.*;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -43,6 +40,11 @@ public class OrderRoutesTest extends JUnitRouteTest {
 
     private TestRoute appRoute;
     private final PersistenceTestKit persistenceTestKit = PersistenceTestKit.create(testKit.system());
+
+    @BeforeClass
+    public static void beforeAll() throws Exception {
+        CreateTableTestUtils.createTables(testKit.system());
+    }
 
     @Before
     public void beforeEach() {
@@ -96,7 +98,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
                 .withEntity(MediaTypes.APPLICATION_JSON.toContentType(),
                         "{\n" +
                                 "    \"userId\": 1,\n" +
-                                "    \"item\": \"\"\n" +
+                                "    \"items\": \"\"\n" +
                                 "}"))
                 .assertStatusCode(StatusCodes.BAD_REQUEST);
     }

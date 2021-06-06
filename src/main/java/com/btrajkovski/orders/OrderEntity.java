@@ -208,6 +208,10 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
         eventsBuilders.forState(state -> state.status == OrderStatus.IN_FULFILLMENT)
                 .onCommand(CloseOrder.class, this::onCloseOrder);
 
+        // Ignore duplicate OrderInFulfilment commands
+        eventsBuilders.forState(state -> state.status == OrderStatus.IN_FULFILLMENT)
+                .onCommand(OrderInFulfilment.class, this::ignoreCommand);
+
         // Negative scenarios
         eventsBuilders.forAnyState()
                 .onCommand(CreateOrder.class, this::createNotAllowed)
@@ -217,20 +221,35 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
         return eventsBuilders.build();
     }
 
+    ActorRef<FulfilmentProvider.Command> fulfilmentProvider;
+
     @Override
     public EventHandler<State, Event> eventHandler() {
         return newEventHandlerBuilder()
                 .forAnyState()
                 .onEvent(OrderCreated.class, (state, event) -> new State(event.items, OrderStatus.CREATED, null))
-                .onEvent(OrderClosed.class, (state, event) -> state.markOrderAsClosed(event.isShippedSuccessfully))
-                .onEvent(OrderPaid.class, (state, event) -> state.markOrderAsPaid())
+                .onEvent(OrderPaid.class, (state, event) -> {
+                    fulfilmentProvider = context.spawn(FulfilmentProvider.create(orderId), "fulfilment-provider-" + orderId);
+                    fulfilmentProvider.tell(new FulfilmentProvider.StartShipOrder(state.toSummary(orderId), context.getSelf()));
+
+                    return state.markOrderAsPaid();
+                })
                 .onEvent(OrderWasInFulfilment.class, (state, event) -> state.markOrderAsInFulfilment())
+                .onEvent(OrderClosed.class, (state, event) -> {
+                    context.stop(fulfilmentProvider);
+                    return state.markOrderAsClosed(event.isShippedSuccessfully);
+                })
                 .build();
     }
 
     private ReplyEffect<Event, State> createNotAllowed(CreateOrder command) {
         context.getLog().info("Create order not allowed");
         return Effect().reply(command.replyTo, StatusReply.error("Cannot create an order" + orderId + " that is already created"));
+    }
+
+    private ReplyEffect<Event, State> ignoreCommand(Command command) {
+        context.getLog().info("Ignoring command {}", command.getClass().getName());
+        return Effect().noReply();
     }
 
     private ReplyEffect<Event, State> orderNotFound(GetOrder command) {
@@ -252,11 +271,9 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
 
     private ReplyEffect<Event, State> onPayOrder(PayOrder command) {
         context.getLog().info("Paying order");
-        ActorRef<FulfilmentProvider.Command> fulfilmentProvider = context.spawn(FulfilmentProvider.create(orderId), "fulfilment-provider-" + orderId);
 
         return Effect()
                 .persist(new OrderPaid(orderId))
-                .thenRun(newState -> fulfilmentProvider.tell(new FulfilmentProvider.ShipOrder(newState.toSummary(orderId), context.getSelf())))
                 .thenReply(command.replyTo, newState -> StatusReply.success(newState.toSummary(orderId)));
     }
 

@@ -53,7 +53,7 @@ public class QuickstartApp {
         });
 
         // boot up server using the route as defined below
-        ActorSystem.create(rootBehavior, "HelloAkkaHttpServer");
+        ActorSystem.create(rootBehavior, "OrdersAkkaHttpServer");
         //#server-bootstrapping
     }
 

@@ -43,10 +43,10 @@ public class OrderRoutes {
     }
 
     private CompletionStage<OrderEntity.OrderSummary> createOrder(CreateOrderRequest createOrderRequest) {
-        if (createOrderRequest.items.isEmpty()) {
+        if (createOrderRequest.items == null || createOrderRequest.items.isEmpty()) {
             throw new OrdersValidationException("Order must contain at least 1 item");
         }
-        if (createOrderRequest.items.stream().anyMatch(item -> item.length() < 3)) {
+        if (createOrderRequest.items.stream().anyMatch(item -> item == null || item.length() < 3)) {
             throw new OrdersValidationException("Each item names must contain at least 3 characters");
         }
 
