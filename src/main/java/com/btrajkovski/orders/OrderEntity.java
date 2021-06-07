@@ -39,31 +39,33 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
         public final List<String> items;
         public final OrderStatus status;
         public final Boolean isShippedSuccessfully;
+        public final String userId;
 
         public State() {
-            this(null, null, null);
+            this(null, null, null, null);
         }
 
-        public State(List<String> items, OrderStatus status, Boolean isShippedSuccessfully) {
+        public State(List<String> items, OrderStatus status, Boolean isShippedSuccessfully, String userId) {
             this.items = items;
             this.status = status;
             this.isShippedSuccessfully = isShippedSuccessfully;
+            this.userId = userId;
         }
 
         public State markOrderAsPaid() {
-            return new State(items, OrderStatus.PAID, isShippedSuccessfully);
+            return new State(items, OrderStatus.PAID, isShippedSuccessfully, userId);
         }
 
         public State markOrderAsInFulfilment() {
-            return new State(items, OrderStatus.IN_FULFILLMENT, isShippedSuccessfully);
+            return new State(items, OrderStatus.IN_FULFILLMENT, isShippedSuccessfully, userId);
         }
 
         public State markOrderAsClosed(boolean isShippedSuccessfully) {
-            return new State(items, OrderStatus.CLOSED, isShippedSuccessfully);
+            return new State(items, OrderStatus.CLOSED, isShippedSuccessfully, userId);
         }
 
         public OrderSummary toSummary(String orderId) {
-            return new OrderSummary(orderId, items, status, isShippedSuccessfully);
+            return new OrderSummary(orderId, items, status, isShippedSuccessfully, userId);
         }
     }
 
@@ -76,10 +78,12 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
 
     public static class CreateOrder implements Command {
         public final List<String> items;
+        public final String userId;
         public final ActorRef<StatusReply<OrderSummary>> replyTo;
 
-        public CreateOrder(List<String> items, ActorRef<StatusReply<OrderSummary>> replyTo) {
+        public CreateOrder(List<String> items, String userId, ActorRef<StatusReply<OrderSummary>> replyTo) {
             this.items = items;
+            this.userId = userId;
             this.replyTo = replyTo;
         }
     }
@@ -119,23 +123,33 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
         public final List<String> items;
         public final OrderStatus state;
         public final Boolean isShippedSuccessfully;
+        public final String userId;
 
         @JsonCreator
-        public OrderSummary(@JsonProperty("id") String id, @JsonProperty("item") List<String> items, @JsonProperty("state") OrderStatus state, @JsonProperty("isShippedSuccessfully") Boolean isShippedSuccessfully) {
+        public OrderSummary(@JsonProperty("id") String id,
+                            @JsonProperty("item") List<String> items,
+                            @JsonProperty("state") OrderStatus state,
+                            @JsonProperty("isShippedSuccessfully") Boolean isShippedSuccessfully,
+                            @JsonProperty("userId") String userId) {
             this.id = id;
             this.items = items;
             this.state = state;
             this.isShippedSuccessfully = isShippedSuccessfully;
+            this.userId = userId;
         }
     }
 
     public static class OrderCreated extends Event {
         public final List<String> items;
+        public final String userId;
 
         @JsonCreator
-        public OrderCreated(String orderId, @JsonProperty("items") List<String> items) {
+        public OrderCreated(@JsonProperty("orderId") String orderId,
+                            @JsonProperty("items") List<String> items,
+                            @JsonProperty("userId") String userId) {
             super(orderId);
             this.items = items;
+            this.userId = userId;
         }
     }
 
@@ -232,7 +246,7 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
     public EventHandler<State, Event> eventHandler() {
         return newEventHandlerBuilder()
                 .forAnyState()
-                .onEvent(OrderCreated.class, (state, event) -> new State(event.items, OrderStatus.CREATED, null))
+                .onEvent(OrderCreated.class, (state, event) -> new State(event.items, OrderStatus.CREATED, null, event.userId))
                 .onEvent(OrderPaid.class, (state, event) -> {
                     fulfilmentProvider = context.spawn(FulfilmentProvider.create(orderId), "fulfilment-provider-" + orderId);
                     fulfilmentProvider.tell(new FulfilmentProvider.StartShipOrder(state.toSummary(orderId), context.getSelf()));
@@ -272,7 +286,7 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
     private ReplyEffect<Event, State> onCreateOrder(CreateOrder command) {
         context.getLog().info("Creating order");
         return Effect()
-                .persist(new OrderCreated(orderId, command.items))
+                .persist(new OrderCreated(orderId, command.items, command.userId))
                 .thenReply(command.replyTo, newState -> StatusReply.success(newState.toSummary(orderId)));
     }
 

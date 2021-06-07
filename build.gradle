@@ -68,7 +68,7 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.20'
 }
 
-mainClassName = "com.btrajkovski.QuickstartApp"
+mainClassName = "com.btrajkovski.OrdersApplication"
 
 run {
     standardInput = System.in

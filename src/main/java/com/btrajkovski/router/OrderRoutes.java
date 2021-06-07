@@ -28,11 +28,8 @@ public class OrderRoutes {
     private static final Logger log = LoggerFactory.getLogger(OrderRoutes.class);
     private final Duration askTimeout;
     private final ClusterSharding sharding;
-    private final ActorSystem<?> system;
 
     public OrderRoutes(ActorSystem<?> system) {
-        this.system = system;
-
         askTimeout = system.settings().config().getDuration("my-app.routes.ask-timeout");
         sharding = ClusterSharding.get(system);
     }
@@ -52,7 +49,7 @@ public class OrderRoutes {
 
         String orderId = UUID.randomUUID().toString();
         EntityRef<OrderEntity.Command> entityRef = sharding.entityRefFor(OrderEntity.ENTITY_KEY, orderId);
-        return entityRef.askWithStatus(replyTo -> new OrderEntity.CreateOrder(createOrderRequest.items, replyTo), askTimeout);
+        return entityRef.askWithStatus(replyTo -> new OrderEntity.CreateOrder(createOrderRequest.items, createOrderRequest.userId, replyTo), askTimeout);
     }
 
     private CompletionStage<OrderEntity.OrderSummary> confirmOrder(String orderUuid) {
@@ -62,31 +59,32 @@ public class OrderRoutes {
 
     final ExceptionHandler exceptionHandler = ExceptionHandler.newBuilder()
             .match(StatusReply.ErrorMessage.class, exp ->
-                    complete(StatusCodes.BAD_REQUEST, exp.getMessage())
+                    complete(StatusCodes.BAD_REQUEST, new ErrorResponse(exp.getMessage()), Jackson.marshaller())
             )
             .match(OrdersValidationException.class, exp ->
-                    complete(StatusCodes.BAD_REQUEST, exp.getMessage())
+                    complete(StatusCodes.BAD_REQUEST, new ErrorResponse(exp.getMessage()), Jackson.marshaller())
             )
             .match(Exception.class, exp ->
-                    complete(StatusCodes.INTERNAL_SERVER_ERROR, exp.getMessage())
+                    complete(StatusCodes.INTERNAL_SERVER_ERROR, new ErrorResponse(exp.getMessage()), Jackson.marshaller())
             )
             .build();
 
     final RejectionHandler rejectionHandler = RejectionHandler.newBuilder()
             .handle(ValidationRejection.class, rej ->
-                    complete(StatusCodes.BAD_REQUEST, "Invalid request: " + rej.message())
+                    complete(StatusCodes.BAD_REQUEST, new ErrorResponse("Invalid request: " + rej.toString()), Jackson.marshaller())
             )
             .handle(MalformedRequestContentRejection.class, rej ->
-                    complete(StatusCodes.BAD_REQUEST, "Invalid request: " + rej.toString())
+                    complete(StatusCodes.BAD_REQUEST, new ErrorResponse("Invalid request: " + rej.toString()), Jackson.marshaller())
             )
             .handleAll(MethodRejection.class, rejections -> {
                 String supported = rejections.stream()
                         .map(rej -> rej.supported().name())
                         .collect(Collectors.joining(" or "));
-                return complete(StatusCodes.METHOD_NOT_ALLOWED, "Only following methods are supported on this endpoint:" + supported);
+                String message = "Only following methods are supported on this endpoint:" + supported;
+                return complete(StatusCodes.METHOD_NOT_ALLOWED, new ErrorResponse(message), Jackson.marshaller());
             })
             .handle(Rejection.class, rej ->
-                    complete(StatusCodes.BAD_REQUEST,  rej.toString())
+                    complete(StatusCodes.BAD_REQUEST, new ErrorResponse(rej.toString()), Jackson.marshaller())
             )
             .build();
 
@@ -114,23 +112,23 @@ public class OrderRoutes {
                                 //get-order-by-id endpoint
                                 path(PathMatchers.segment(), (String orderUuid) ->
                                         get(() ->
-                                                        rejectEmptyResponse(() ->
-                                                                onSuccess(getOrder(orderUuid), performed -> {
-                                                                            log.info("Get order by uuid {}", orderUuid);
-                                                                            return complete(StatusCodes.OK, performed, Jackson.marshaller());
-                                                                        }
-                                                                )
+                                                rejectEmptyResponse(() ->
+                                                        onSuccess(getOrder(orderUuid), performed -> {
+                                                                    log.info("Get order by uuid {}", orderUuid);
+                                                                    return complete(StatusCodes.OK, performed, Jackson.marshaller());
+                                                                }
                                                         )
+                                                )
                                         )
                                 ),
                                 //#pay-order endpoint
                                 path(PathMatchers.segment().slash("confirm"), (String orderUuid) ->
                                         get(() ->
-                                                        rejectEmptyResponse(() ->
-                                                                onSuccess(confirmOrder(orderUuid), performed ->
-                                                                        complete(StatusCodes.OK, performed, Jackson.marshaller())
-                                                                )
+                                                rejectEmptyResponse(() ->
+                                                        onSuccess(confirmOrder(orderUuid), performed ->
+                                                                complete(StatusCodes.OK, performed, Jackson.marshaller())
                                                         )
+                                                )
                                         )
                                 )
                         )
