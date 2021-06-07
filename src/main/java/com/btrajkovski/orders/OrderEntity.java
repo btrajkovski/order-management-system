@@ -35,7 +35,7 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
         }
     }
 
-    public static class State {
+    public static class State implements JsonSerializable {
         public final List<String> items;
         public final OrderStatus status;
         public final Boolean isShippedSuccessfully;
@@ -224,6 +224,11 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
     ActorRef<FulfilmentProvider.Command> fulfilmentProvider;
 
     @Override
+    public boolean shouldSnapshot(State state, Event event, long sequenceNr) {
+        return event instanceof OrderClosed;
+    }
+
+    @Override
     public EventHandler<State, Event> eventHandler() {
         return newEventHandlerBuilder()
                 .forAnyState()
@@ -239,6 +244,8 @@ public class OrderEntity extends EventSourcedBehaviorWithEnforcedReplies<OrderEn
                     context.stop(fulfilmentProvider);
                     return state.markOrderAsClosed(event.isShippedSuccessfully);
                 })
+
+
                 .build();
     }
 

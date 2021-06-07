@@ -29,14 +29,14 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 
-public class OrderRoutesTest extends JUnitRouteTest {
+public class OrdersIntegrationTest extends JUnitRouteTest {
 
     @ClassRule
     public static final TestKitJunitResource testKit =
             new TestKitJunitResource(
                     PersistenceTestKitPlugin.getInstance()
                             .config()
-                            .withFallback(ConfigFactory.load(OrderRoutesTest.class.getClassLoader(), "application-test.conf")));
+                            .withFallback(ConfigFactory.load(OrdersIntegrationTest.class.getClassLoader(), "application-test.conf")));
 
     private TestRoute appRoute;
     private final PersistenceTestKit persistenceTestKit = PersistenceTestKit.create(testKit.system());

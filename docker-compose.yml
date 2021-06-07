@@ -7,13 +7,3 @@ services:
     environment:
       POSTGRES_USER: orders
       POSTGRES_PASSWORD: orders
-
-  # this second PostgresSQL is used when running test
-  postgres-db-test:
-    image: postgres:latest
-    ports:
-      - 5433:5432
-    environment:
-      POSTGRES_DB: orders
-      POSTGRES_USER: orders
-      POSTGRES_PASSWORD: orders
