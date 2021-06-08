@@ -20,10 +20,7 @@ import akka.persistence.typed.PersistenceId;
 import com.btrajkovski.orders.OrderEntity;
 import com.btrajkovski.router.OrderRoutes;
 import com.typesafe.config.ConfigFactory;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.*;
 
 import java.time.Duration;
 import java.util.Collections;
@@ -32,17 +29,22 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 
-public class OrderRoutesTest extends JUnitRouteTest {
+public class OrdersIntegrationTest extends JUnitRouteTest {
 
     @ClassRule
     public static final TestKitJunitResource testKit =
             new TestKitJunitResource(
                     PersistenceTestKitPlugin.getInstance()
                             .config()
-                            .withFallback(ConfigFactory.load(OrderRoutesTest.class.getClassLoader(), "application-test.conf")));
+                            .withFallback(ConfigFactory.load(OrdersIntegrationTest.class.getClassLoader(), "application-test.conf")));
 
     private TestRoute appRoute;
     private final PersistenceTestKit persistenceTestKit = PersistenceTestKit.create(testKit.system());
+
+    @BeforeClass
+    public static void beforeAll() throws Exception {
+        CreateTableTestUtils.createTables(testKit.system());
+    }
 
     @Before
     public void beforeEach() {
@@ -96,18 +98,20 @@ public class OrderRoutesTest extends JUnitRouteTest {
                 .withEntity(MediaTypes.APPLICATION_JSON.toContentType(),
                         "{\n" +
                                 "    \"userId\": 1,\n" +
-                                "    \"item\": \"\"\n" +
+                                "    \"items\": \"\"\n" +
                                 "}"))
+                .assertMediaType("application/json")
                 .assertStatusCode(StatusCodes.BAD_REQUEST);
     }
 
     @Test
     public void paymentOfOrder() {
         String itemName = "Logitech MX518";
+        String userId = "1";
 
         TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
         EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
-        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), createOrderProbe.getRef()));
+        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), userId, createOrderProbe.getRef()));
         OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
 
         String orderId = orderCreated.id;
@@ -133,6 +137,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
         assertThat(orderSummary.id).isNotNull();
         assertThat(orderSummary.state).isEqualTo(OrderEntity.OrderStatus.CLOSED);
         assertThat(orderSummary.items).containsExactly(itemName);
+        assertThat(orderSummary.userId).isEqualTo(userId);
 
         String persistenceId = PersistenceId.of(OrderEntity.ENTITY_KEY.name(), orderSummary.id).id();
         persistenceTestKit.expectNextPersistedClass(persistenceId, OrderEntity.OrderCreated.class);
@@ -144,10 +149,11 @@ public class OrderRoutesTest extends JUnitRouteTest {
     @Test
     public void getOrderById() {
         String itemName = "Intel i3 9100f";
+        String userId = "1";
 
         TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
         EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
-        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), createOrderProbe.getRef()));
+        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), userId, createOrderProbe.getRef()));
         OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
 
         OrderEntity.OrderSummary ordersResponse = appRoute.run(HttpRequest.GET("/orders/" + orderCreated.id))
@@ -163,10 +169,11 @@ public class OrderRoutesTest extends JUnitRouteTest {
     @Test
     public void shouldThrowBadRequestIfPayingSameOrderTwice() {
         String itemName = "Logitech MX518";
+        String userId = "1";
 
         TestProbe<StatusReply<OrderEntity.OrderSummary>> createOrderProbe = testKit.createTestProbe();
         EntityRef<OrderEntity.Command> entityRef = ClusterSharding.get(testKit.system()).entityRefFor(OrderEntity.ENTITY_KEY, UUID.randomUUID().toString());
-        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), createOrderProbe.getRef()));
+        entityRef.tell(new OrderEntity.CreateOrder(Collections.singletonList(itemName), userId, createOrderProbe.getRef()));
         OrderEntity.OrderSummary orderCreated = createOrderProbe.receiveMessage().getValue();
 
         String orderId = orderCreated.id;
@@ -175,6 +182,7 @@ public class OrderRoutesTest extends JUnitRouteTest {
                 .assertMediaType("application/json");
 
         appRoute.run(HttpRequest.GET(String.format("/orders/%s/confirm", orderId)))
-                .assertStatusCode(StatusCodes.BAD_REQUEST);
+                .assertStatusCode(StatusCodes.BAD_REQUEST)
+                .assertMediaType("application/json");
     }
 }

@@ -10,10 +10,11 @@ import java.util.List;
 @ToString
 public class CreateOrderRequest implements JsonSerializable {
     public final List<String> items;
-    public final long userId;
+    public final String userId;
 
     @JsonCreator
-    public CreateOrderRequest(@JsonProperty(required = true, value = "items") List<String> items, @JsonProperty(value = "userId", required = true) long userId) {
+    public CreateOrderRequest(@JsonProperty(required = true, value = "items") List<String> items,
+                              @JsonProperty(value = "userId", required = true) String userId) {
         this.items = items;
         this.userId = userId;
     }

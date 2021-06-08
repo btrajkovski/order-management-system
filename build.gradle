@@ -16,6 +16,8 @@ def versions = [
         AkkaVersion    : "2.6.14",
         AkkaHttpVersion: "10.2.4",
         AkkaPlatformVersion: "0.1.5",
+        AkkaPersistanceVersion: "5.0.1",
+        SlickVersion: "3.3.3",
         ScalaBinary    : "2.13"
 ]
 dependencies {
@@ -23,20 +25,30 @@ dependencies {
     implementation platform("com.typesafe.akka:akka-http-bom_${versions.ScalaBinary}:${versions.AkkaHttpVersion}")
     implementation platform("com.lightbend.akka:akka-platform-dependencies_${versions.ScalaBinary}:${versions.AkkaPlatformVersion}")
 
+//    HTTP server
     implementation "com.typesafe.akka:akka-http_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-http-jackson_${versions.ScalaBinary}"
+
+//    Persistence
     implementation "com.typesafe.akka:akka-persistence-typed_${versions.ScalaBinary}"
+    implementation "com.lightbend.akka:akka-persistence-jdbc_${versions.ScalaBinary}:${versions.AkkaPersistanceVersion}"
+    implementation "com.typesafe.slick:slick_${versions.ScalaBinary}:${versions.SlickVersion}"
+    implementation "com.typesafe.slick:slick-hikaricp_${versions.ScalaBinary}:${versions.SlickVersion}"
     implementation "com.typesafe.akka:akka-serialization-jackson_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-actor-typed_${versions.ScalaBinary}"
+    implementation "com.lightbend.akka:akka-projection-jdbc_${versions.ScalaBinary}"
+    runtimeOnly "org.postgresql:postgresql:42.2.20"
+
+//    Cluster and sharding
     implementation "com.typesafe.akka:akka-stream_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-cluster-typed_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-cluster-sharding-typed_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-cluster-tools_${versions.ScalaBinary}"
     implementation "com.typesafe.akka:akka-cluster-tools_${versions.ScalaBinary}"
-    implementation "com.lightbend.akka:akka-projection-jdbc_${versions.ScalaBinary}"
     implementation "com.lightbend.akka.management:akka-management-cluster-http_${versions.ScalaBinary}"
     implementation "com.lightbend.akka.management:akka-management-cluster-bootstrap_${versions.ScalaBinary}"
 
+    // Other
     implementation "com.fasterxml.jackson.module:jackson-module-scala_${versions.ScalaBinary}:2.12.3"
     implementation 'ch.qos.logback:logback-classic:1.2.3'
     implementation "org.fusesource.leveldbjni:leveldbjni-all:1.8"
@@ -49,13 +61,14 @@ dependencies {
     testImplementation "com.typesafe.akka:akka-stream-testkit_${versions.ScalaBinary}"
     testImplementation "com.typesafe.akka:akka-http-testkit_${versions.ScalaBinary}"
     testImplementation "com.typesafe.akka:akka-persistence-testkit_${versions.ScalaBinary}"
+    testImplementation "com.h2database:h2:1.4.200"
     testImplementation 'junit:junit:4.12'
     testCompileOnly 'org.projectlombok:lombok:1.18.20'
 
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.20'
 }
 
-mainClassName = "com.example.QuickstartApp"
+mainClassName = "com.btrajkovski.OrdersApplication"
 
 run {
     standardInput = System.in

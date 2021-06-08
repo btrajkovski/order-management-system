@@ -16,7 +16,7 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.CompletionStage;
 
 //#main-class
-public class QuickstartApp {
+public class OrdersApplication {
     // #start-http-server
     static void startHttpServer(Route route, ActorSystem<?> system) {
         CompletionStage<ServerBinding> futureBinding =
@@ -36,24 +36,22 @@ public class QuickstartApp {
     }
     // #start-http-server
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         //#server-bootstrapping
-
-
         Behavior<NotUsed> rootBehavior = Behaviors.setup(context -> {
 
             AkkaManagement.get(context.getSystem()).start();
             ClusterBootstrap.get(context.getSystem()).start();
             OrderEntity.init(context.getSystem());
 
-            OrderRoutes orderRoutes = new OrderRoutes(context.getSystem());
+            var orderRoutes = new OrderRoutes(context.getSystem());
             startHttpServer(orderRoutes.userRoutes(), context.getSystem());
 
             return Behaviors.empty();
         });
 
         // boot up server using the route as defined below
-        ActorSystem.create(rootBehavior, "HelloAkkaHttpServer");
+        ActorSystem.create(rootBehavior, "OrdersAkkaHttpServer");
         //#server-bootstrapping
     }
 
